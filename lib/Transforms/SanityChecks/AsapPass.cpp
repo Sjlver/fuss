@@ -105,10 +105,6 @@ void AsapPass::getAnalysisUsage(AnalysisUsage& AU) const {
 
 // Tries to remove a sanity check; returns true if it worked.
 bool AsapPass::optimizeCheckAway(llvm::Instruction *Inst) {
-    // We simply remove the check root, and let dead code elimination handle
-    // the rest.
-    assert(Inst->use_empty() && "Sanity check is being used?");
-    
     if (PrintRemovedChecks) {
         DebugLoc DL = getInstrumentationDebugLoc(Inst);
         printDebugLoc(DL, Inst->getContext(), dbgs());
@@ -127,7 +123,17 @@ bool AsapPass::optimizeCheckAway(llvm::Instruction *Inst) {
         dbgs() << "\n";
     }
 
+    // We'd like to simply remove the check root, and let dead code elimination handle
+    // the rest. However, instrumentation tools add things like inline assembly
+    // to prevent checks from getting DCE'd, so we need to remove that, too.
+    assert(Inst->use_empty() && "Sanity check is being used?");
     Inst->eraseFromParent();
+    for (auto I : SCI->getInstructionsBySanityCheck(Inst)) {
+        if (isAsmForSideEffect(I)) {
+            assert(I->use_empty() && "AsmForSideEffect is being used?");
+            I->eraseFromParent();
+        }
+    }
     return true;
 }
 

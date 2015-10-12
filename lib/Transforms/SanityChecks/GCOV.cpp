@@ -164,7 +164,8 @@ uint64_t GCOVFile::getCount(Instruction *Inst) const {
     }
     assert(ParentBI != ParentF->end()
             && "Basic block not a member of its parent function?.");
-    assert(ParentBI->getTerminator()->getNumSuccessors() == BI->getNumDstEdges()
+    assert(((isa<ReturnInst>(ParentBI->getTerminator()) && BI->getNumDstEdges() == 1) ||
+            (ParentBI->getTerminator()->getNumSuccessors() == BI->getNumDstEdges()))
             && "CFG mismatch: dst edges");
     
     return BI->getCount();
