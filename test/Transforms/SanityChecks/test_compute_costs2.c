@@ -24,8 +24,8 @@ int main () {
     printf("How many numbers to sum up?\n");
     scanf("%d", &n_numbers);
     for (int i = 0; i < n_numbers; ++i) {
-        // Two lines down, there should be a sanity check with cost 50.
-        // CHECK: 50 {{.*}}test_compute_costs2.c:29
+        // Two lines down, there should be a sanity check with cost 60.
+        // CHECK: 60 {{.*}}test_compute_costs2.c:29
         sum += a[i];
     }
     printf("\n%d", sum);

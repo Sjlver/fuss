@@ -15,10 +15,16 @@ namespace llvm {
     class Value;
 }
 
+// TODO: This talks about sanity checks... renaming all the stuff to
+//       "instrumentation" would be more appropriate.
+
+// TODO: Const-correctness. Shouldn't an InstructionSet contain const instrs?
+
 struct SanityCheckInstructionsPass : public llvm::ModulePass {
     static char ID;
 
     SanityCheckInstructionsPass() : ModulePass(ID) {}
+    virtual ~SanityCheckInstructionsPass() {}
 
     virtual bool runOnModule(llvm::Module &M);
 
@@ -30,8 +36,8 @@ struct SanityCheckInstructionsPass : public llvm::ModulePass {
     typedef llvm::SmallPtrSet<llvm::BasicBlock*, 64> BlockSet;
     typedef llvm::SmallPtrSet<llvm::Instruction*, 64> InstructionSet;
 
-    const InstructionSet &getSanityCheckBranches(llvm::Function *F) const {
-        return SanityCheckBranches.at(F);
+    const InstructionSet &getSanityCheckRoots(llvm::Function *F) const {
+        return SanityCheckRoots.at(F);
     }
     
     const BlockSet &getSanityCheckBlocks(llvm::Function *F) const {
@@ -42,25 +48,31 @@ struct SanityCheckInstructionsPass : public llvm::ModulePass {
         return InstructionsBySanityCheck.at(Inst);
     }
 
-    // Searches the given basic block for a call instruction that corresponds to
-    // a sanity check and will abort the program (e.g., __assert_fail).
-    const llvm::CallInst *findSanityCheckCall(llvm::BasicBlock *BB) const;
-    
 private:
 
-    // All blocks that abort due to sanity checks
+    // All blocks that contain only sanity check instructions
     std::map<llvm::Function*, BlockSet> SanityCheckBlocks;
 
     // All instructions that belong to sanity checks
     std::map<llvm::Function*, InstructionSet> SanityCheckInstructions;
     
-    // All sanity checks themselves (branch instructions that could lead to an abort)
-    std::map<llvm::Function*, InstructionSet> SanityCheckBranches;
+    // All sanity check roots. These are the instructions at the source of a
+    // sanity check. For example, a call to __asan_report_read4.
+    std::map<llvm::Function*, InstructionSet> SanityCheckRoots;
     
-    // A map of all instructions required by a given sanity check branch.
-    // Note that instructions can belong to multiple sanity check branches.
+    // A map of all instructions on which a given sanity check root
+    // instruction depends.
+    // Note that instructions can belong to multiple sanity checks.
     std::map<llvm::Instruction*, InstructionSet> InstructionsBySanityCheck;
 
+    // Searches for sanity check instructions in the given function.
     void findInstructions(llvm::Function *F);
+
+    // Determines whether a given value is only used by sanity check
+    // instructions, and nowhere else in the program.
     bool onlyUsedInSanityChecks(llvm::Value *V);
+
+    // Determines whether a given block contains only instructions from a
+    // given set, and no other instructions.
+    bool onlyContainsInstructionsFrom(llvm::BasicBlock *BB, const InstructionSet& Instrs);
 };

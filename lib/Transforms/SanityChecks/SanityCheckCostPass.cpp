@@ -47,15 +47,13 @@ bool SanityCheckCostPass::runOnModule(Module &M) {
         DEBUG(dbgs() << "SanityCheckCostPass on " << F.getName() << "\n");
         const TargetTransformInfo &TTI = TTIWP.getTTI(F);
 
-        for (Instruction *Inst: SCI.getSanityCheckBranches(&F)) {
+        for (Instruction *Inst: SCI.getSanityCheckRoots(&F)) {
             assert(Inst->getParent()->getParent() == &F && "SCI must only contain instructions of the current function.");
             
-            BranchInst *BI = dyn_cast<BranchInst>(Inst);
-            assert(BI && BI->isConditional() && "SanityCheckBranches must not contain instructions that aren't conditional branches.");
-
 #ifndef NDEBUG
             int nInstructions = 0;
             int nFreeInstructions = 0;
+            uint64_t maxCount = 0;
 #endif
             
             // The cost of a check is the sum of the cost of all instructions
@@ -63,7 +61,7 @@ bool SanityCheckCostPass::runOnModule(Module &M) {
             // TODO: If an instruction is used by multiple checks, we need an
             // intelligent way to handle the nonlinearity.
             uint64_t Cost = 0;
-            for (Instruction *CI: SCI.getInstructionsBySanityCheck(BI)) {
+            for (Instruction *CI: SCI.getInstructionsBySanityCheck(Inst)) {
                 unsigned CurrentCost = sanitychecks::getInstructionCost(CI, &TTI);
 
                 // Assume a default cost of 1 for unknown instructions
@@ -81,6 +79,11 @@ bool SanityCheckCostPass::runOnModule(Module &M) {
 
                 Cost += CurrentCost * GF->getCount(CI);
                 DEBUG(nInstructions += 1);
+                DEBUG(
+                    if (GF->getCount(CI) > maxCount) {
+                        maxCount = GF->getCount(CI);
+                    }
+                );
             }
 
             APInt CountInt = APInt(64, Cost);
@@ -88,16 +91,15 @@ bool SanityCheckCostPass::runOnModule(Module &M) {
                 {ConstantAsMetadata::get(ConstantInt::get(
                     Type::getInt64Ty(M.getContext()), CountInt))});
             Inst->setMetadata("cost", MD);
-            CheckCosts.push_back(std::make_pair(BI, Cost));
+            CheckCosts.push_back(std::make_pair(Inst, Cost));
 
             DEBUG(
-                dbgs() << "Sanity check: " << *BI << "\n";
-                unsigned int RegularBranch = getRegularBranch(BI, &SCI);
-                DebugLoc DL = getSanityCheckDebugLoc(BI, RegularBranch);
+                dbgs() << "Sanity check: " << *Inst << "\n";
+                DebugLoc DL = getInstrumentationDebugLoc(Inst);
                 printDebugLoc(DL, M.getContext(), dbgs());
                 dbgs() << "\nnInstructions: " << nInstructions << "\n";
                 dbgs() << "nFreeInstructions: " << nFreeInstructions << "\n";
-                dbgs() << "Count: " << GF->getCount(BI) << "\n";
+                dbgs() << "maxCount: " << maxCount << "\n";
                 dbgs() << "Cost: " << Cost << "\n";
             );
         }
@@ -115,12 +117,10 @@ void SanityCheckCostPass::getAnalysisUsage(AnalysisUsage& AU) const {
 }
 
 void SanityCheckCostPass::print(raw_ostream &O, const Module *M) const {
-    SanityCheckInstructionsPass &SCI = getAnalysis<SanityCheckInstructionsPass>();
     O << "                Cost Location\n";
     for (const CheckCost &I : CheckCosts) {
         O << format("%20llu ", I.second);
-        unsigned int RegularBranch = getRegularBranch(I.first, &SCI);
-        DebugLoc DL = getSanityCheckDebugLoc(I.first, RegularBranch);
+        DebugLoc DL = getInstrumentationDebugLoc(I.first);
         printDebugLoc(DL, M->getContext(), O);
         O << '\n';
     }

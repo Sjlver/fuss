@@ -105,54 +105,30 @@ void AsapPass::getAnalysisUsage(AnalysisUsage& AU) const {
 
 // Tries to remove a sanity check; returns true if it worked.
 bool AsapPass::optimizeCheckAway(llvm::Instruction *Inst) {
-    BranchInst *BI = cast<BranchInst>(Inst);
-    assert(BI->isConditional() && "Sanity check must be conditional branch.");
+    // We simply remove the check root, and let dead code elimination handle
+    // the rest.
+    assert(Inst->use_empty() && "Sanity check is being used?");
     
-    unsigned int RegularBranch = getRegularBranch(BI, SCI);
-    
-    bool Changed = false;
-    if (RegularBranch == 0) {
-        BI->setCondition(ConstantInt::getTrue(Inst->getContext()));
-        Changed = true;
-    } else if (RegularBranch == 1) {
-        BI->setCondition(ConstantInt::getFalse(Inst->getContext()));
-        Changed = true;
-    } else {
-        // This can happen, e.g., in the following case:
-        //     array[-1] = a + b;
-        // is transformed into
-        //     if (a + b overflows)
-        //         report_overflow()
-        //     else
-        //         report_index_out_of_bounds();
-        // In this case, removing the sanity check does not help much, so we
-        // just do nothing.
-        // Thanks to Will Dietz for his explanation at
-        // http://lists.cs.uiuc.edu/pipermail/llvmdev/2014-April/071958.html
-        dbgs() << "Warning: Sanity check with no regular branch found.\n";
-        dbgs() << "The sanity check has been kept intact.\n";
-    }
-    
-    if (PrintRemovedChecks && Changed) {
-        DebugLoc DL = getSanityCheckDebugLoc(BI, RegularBranch);
-        printDebugLoc(DL, BI->getContext(), dbgs());
+    if (PrintRemovedChecks) {
+        DebugLoc DL = getInstrumentationDebugLoc(Inst);
+        printDebugLoc(DL, Inst->getContext(), dbgs());
         dbgs() << ": SanityCheck with cost ";
-        dbgs() << *BI->getMetadata("cost")->getOperand(0);
+        dbgs() << *Inst->getMetadata("cost")->getOperand(0);
 
         if (MDNode *IA = DL.getInlinedAt()) {
             dbgs() << " (inlined at ";
-            printDebugLoc(DebugLoc(IA), BI->getContext(), dbgs());
+            printDebugLoc(DebugLoc(IA), Inst->getContext(), dbgs());
             dbgs() << ")";
         }
 
-        BasicBlock *Succ = BI->getSuccessor(RegularBranch == 0 ? 1 : 0);
-        if (const CallInst *CI = SCI->findSanityCheckCall(Succ)) {
+        if (auto *CI = dyn_cast<CallInst>(Inst)) {
             dbgs() << " " << CI->getCalledFunction()->getName();
         }
         dbgs() << "\n";
     }
 
-    return Changed;
+    Inst->eraseFromParent();
+    return true;
 }
 
 char AsapPass::ID = 0;

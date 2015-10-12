@@ -4,6 +4,8 @@
 #include "SanityCheckInstructionsPass.h"
 #include "utils.h"
 
+#include <algorithm>
+
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
@@ -21,7 +23,7 @@ bool SanityCheckInstructionsPass::runOnModule(Module &M) {
         DEBUG(dbgs() << "SanityCheckInstructionsPass on " << F.getName() << "\n");
         SanityCheckBlocks[&F] = BlockSet();
         SanityCheckInstructions[&F] = InstructionSet();
-        SanityCheckBranches[&F] = InstructionSet();
+        SanityCheckRoots[&F] = InstructionSet();
         findInstructions(&F);
 
         MDNode *MD = MDNode::get(M.getContext(), {});
@@ -29,58 +31,57 @@ bool SanityCheckInstructionsPass::runOnModule(Module &M) {
             Inst->setMetadata("sanitycheck", MD);
         }
     }
-    
+
     return false;
 }
 
 void SanityCheckInstructionsPass::findInstructions(Function *F) {
-
     // A list of instructions that are used by sanity checks. They become sanity
     // check instructions if it turns out they're not used by anything else.
     SmallPtrSet<Instruction*, 128> Worklist;
-    
+
     // A list of basic blocks that contain sanity check instructions. They
     // become sanity check blocks if it turns out they don't contain anything
     // else.
     SmallPtrSet<BasicBlock*, 64>   BlockWorklist;
-    
+
     // A map from instructions to the checks that use them.
     std::map<Instruction*, SmallPtrSet<Instruction*, 4> > ChecksByInstruction;
 
-    for (BasicBlock &BB: *F) {
-        if (findSanityCheckCall(&BB)) {
-            SanityCheckBlocks[F].insert(&BB);
-
-            // All instructions inside sanity check blocks are sanity check instructions
-            for (Instruction &I: BB) {
+    // Initialize the work list.
+    for (BasicBlock &BB : *F) {
+        Instruction *InstrumentationInBB = nullptr;
+        for (Instruction &I : BB) {
+            if (isInstrumentation(&I)) {
                 Worklist.insert(&I);
+                ChecksByInstruction[&I].insert(&I);
+                SanityCheckRoots[F].insert(&I);
+                InstrumentationInBB = &I;
             }
 
-            // All branches to sanity check blocks are sanity check branches
-            for (User *U: BB.users()) {
-                if (Instruction *Inst = dyn_cast<Instruction>(U)) {
-                    Worklist.insert(Inst);
-                }
-                BranchInst *BI = dyn_cast<BranchInst>(U);
-                if (BI && BI->isConditional()) {
-                    SanityCheckBranches[F].insert(BI);
-                    ChecksByInstruction[BI].insert(BI);
-                }
+            // If instrumentation is followed by asm instructions for side
+            // effects or unreachable instructions, add them. Such instructions
+            // were added by the instrumentation tool. This is a bit of a
+            // hack...
+            if (InstrumentationInBB && (isAsmForSideEffect(&I) || isa<UnreachableInst>(&I))) {
+              Worklist.insert(&I);
+              ChecksByInstruction[&I].insert(InstrumentationInBB);
             }
         }
     }
 
-    while (!Worklist.empty()) {
+    while (!Worklist.empty() || !BlockWorklist.empty()) {
         // Alternate between emptying the worklist...
         while (!Worklist.empty()) {
             Instruction *Inst = *Worklist.begin();
             Worklist.erase(Inst);
+
             if (onlyUsedInSanityChecks(Inst)) {
                 if (SanityCheckInstructions[F].insert(Inst).second) {
                     for (Use &U: Inst->operands()) {
                         if (Instruction *Op = dyn_cast<Instruction>(U.get())) {
                             Worklist.insert(Op);
-                            
+
                             // Copy ChecksByInstruction from Inst to Op
                             auto CBI = ChecksByInstruction.find(Inst);
                             if (CBI != ChecksByInstruction.end()) {
@@ -91,7 +92,8 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
 
                     BlockWorklist.insert(Inst->getParent());
 
-                    // Fill InstructionsBySanityCheck from the inverse ChecksByInstruction
+                    // Fill InstructionsBySanityCheck from the inverse
+                    // ChecksByInstruction
                     auto CBI = ChecksByInstruction.find(Inst);
                     if (CBI != ChecksByInstruction.end()) {
                         for (Instruction *CI : CBI->second) {
@@ -108,19 +110,16 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
         while (!BlockWorklist.empty()) {
             BasicBlock *BB = *BlockWorklist.begin();
             BlockWorklist.erase(BB);
-            
-            bool allInstructionsAreSanityChecks = true;
-            for (Instruction &I: *BB) {
-                if (!SanityCheckInstructions.at(BB->getParent()).count(&I)) {
-                    allInstructionsAreSanityChecks = false;
-                    break;
-                }
-            }
-            
-            if (allInstructionsAreSanityChecks) {
+
+            if (onlyContainsInstructionsFrom(BB, SanityCheckInstructions.at(BB->getParent()))) {
                 for (User *U: BB->users()) {
                     if (Instruction *Inst = dyn_cast<Instruction>(U)) {
                         Worklist.insert(Inst);
+                        // Attribute Inst to the same check as the first instruction in BB.
+                        auto CBI = ChecksByInstruction.find(BB->begin());
+                        if (CBI != ChecksByInstruction.end()) {
+                            ChecksByInstruction[Inst].insert(CBI->second.begin(), CBI->second.end());
+                        }
                     }
                 }
             }
@@ -128,28 +127,24 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
     }
 }
 
-const CallInst *SanityCheckInstructionsPass::findSanityCheckCall(BasicBlock* BB) const {
-    for (const Instruction &I: *BB) {
-        if (const CallInst *CI = dyn_cast<CallInst>(&I)) {
-            if (isAbortingCall(CI)) {
-                return CI;
-            }
-        }
-    }
-    return 0;
-}
-
 bool SanityCheckInstructionsPass::onlyUsedInSanityChecks(Value* V) {
     for (User *U: V->users()) {
         Instruction *Inst = dyn_cast<Instruction>(U);
         if (!Inst) return false;
-        
+
         Function *F = Inst->getParent()->getParent();
         if (!(SanityCheckInstructions[F].count(Inst))) {
             return false;
         }
     }
     return true;
+}
+
+bool SanityCheckInstructionsPass::onlyContainsInstructionsFrom(BasicBlock *BB, const InstructionSet& Instrs) {
+    return std::all_of(BB->begin(), BB->end(), [&Instrs](Instruction &I) {
+        // TODO: ignore debug intrinsics, etc.?
+        return Instrs.count(&I) > 0;
+    });
 }
 
 char SanityCheckInstructionsPass::ID = 0;

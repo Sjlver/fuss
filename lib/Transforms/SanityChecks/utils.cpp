@@ -8,6 +8,7 @@
 
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
@@ -23,53 +24,99 @@ OptimizeAssertions("asap-optimize-assertions",
         cl::desc("Should ASAP affect programmer-written assertions?"),
         cl::init(true));
 
-// Returns true if a given instruction is a call to an aborting, error reporting
-// function
-bool isAbortingCall(const CallInst *CI) {
-    if (CI->getCalledFunction()) {
-        StringRef name = CI->getCalledFunction()->getName();
-        if (name.startswith("__ubsan_") && name.endswith("_abort")) {
-            return OptimizeSanityChecks;
-        }
-        if (name.startswith("__softboundcets_") && name.endswith("_abort")) {
-            return OptimizeSanityChecks;
-        }
-        if (name.startswith("__asan_report_")) {
-            return OptimizeSanityChecks;
-        }
-        if (name == "__assert_fail" || name == "__assert_rtn") {
-            return OptimizeAssertions;
+static cl::opt<bool>
+OptimizeThreadSanitizer("asap-optimize-tsan",
+        cl::desc("Should ASAP affect TSan runtime library functions?"),
+        cl::init(true));
+
+bool isInstrumentation(const Instruction *I) {
+    if (auto *CI = dyn_cast<const CallInst>(I)) {
+        if (CI->getCalledFunction()) {
+            StringRef name = CI->getCalledFunction()->getName();
+            if (name.startswith("__ubsan_") && name.endswith("_abort")) {
+                return OptimizeSanityChecks;
+            }
+            if (name.startswith("__softboundcets_") && name.endswith("_abort")) {
+                return OptimizeSanityChecks;
+            }
+            if (name.startswith("__asan_report_")) {
+                return OptimizeSanityChecks;
+            }
+            if (name == "__assert_fail" || name == "__assert_rtn") {
+                return OptimizeAssertions;
+            }
+            if (name.startswith("__tsan_read") || name.startswith("__tsan_unaligned_read") ||
+                name.startswith("__tsan_write") || name.startswith("__tsan_unaligned_write")) {
+                return OptimizeThreadSanitizer;
+            }
         }
     }
     return false;
 }
 
-unsigned int getRegularBranch(BranchInst *BI, SanityCheckInstructionsPass *SCI) {
-    unsigned int RegularBranch = (unsigned)(-1);
-    Function *F = BI->getParent()->getParent();
-    for (unsigned int I = 0, E = BI->getNumSuccessors(); I != E; ++I) {
-        if (!SCI->getSanityCheckBlocks(F).count(BI->getSuccessor(I))) {
-            assert(RegularBranch == (unsigned)(-1) && "More than one regular branch?");
-            RegularBranch = I;
+bool isAsmForSideEffect(const Instruction *I) {
+    if (const CallInst *CI = dyn_cast<CallInst>(I)) {
+        if (const InlineAsm *IA = dyn_cast<InlineAsm>(CI->getCalledValue())) {
+            return (IA->getAsmString().empty() && IA->getConstraintString().empty());
         }
     }
-    return RegularBranch;
+
+    return false;
 }
 
-llvm::DebugLoc getSanityCheckDebugLoc(BranchInst *BI, unsigned int RegularBranch) {
-    DebugLoc DL = BI->getDebugLoc();
-    if (!DL && RegularBranch != (unsigned int)(-1)) {
-        // If the branch instruction itself does not have a debug location,
-        // we take the location of the first instruction in the regular
-        // branch. This will most likely be the original instruction that
-        // was protected with a sanity check.
-        BasicBlock *Succ = BI->getSuccessor(RegularBranch);
-        for (auto SI = Succ->begin(), SE = Succ->end();
-                SI != SE && !DL; ++SI) {
-            DL = SI->getDebugLoc();
+bool isAbortingCall(const CallInst *CI) {
+    if (CI->getCalledFunction()) {
+        StringRef name = CI->getCalledFunction()->getName();
+        if (name.startswith("__ubsan_") && name.endswith("_abort")) {
+            return true;
+        }
+        if (name.startswith("__softboundcets_") && name.endswith("_abort")) {
+            return true;
+        }
+        if (name.startswith("__asan_report_")) {
+            return true;
+        }
+        if (name == "__assert_fail" || name == "__assert_rtn") {
+            return true;
         }
     }
-    return DL;
+    return false;
+}
+
+DebugLoc getBasicBlockDebugLoc(BasicBlock *BB) {
+    for (Instruction &Inst : *BB) {
+        DebugLoc DL = Inst.getDebugLoc();
+        if (DL) return DL;
+    }
+    return DebugLoc();
+}
+
+DebugLoc getInstrumentationDebugLoc(Instruction *Inst) {
+    DebugLoc DL = Inst->getDebugLoc();
+    if (DL) return DL;
+
+    // If the instruction itself does not have a debug location,
+    // we first scan other instructions in the same basic block.
+    BasicBlock *BB = Inst->getParent();
+    DL = getBasicBlockDebugLoc(BB);
+    if (DL) return DL;
+
+    // If that doesn't help, we look at the branch that leads to this
+    // instruction, and scan the alternate basic block, if any.
+    for (auto U : BB->users()) {
+        if (auto *BI = dyn_cast<BranchInst>(U)) {
+            for (unsigned i = 0; i < BI->getNumSuccessors(); ++i) {
+                BasicBlock *AltBB = BI->getSuccessor(i);
+                if (AltBB == BB) continue;
+
+                DL = getBasicBlockDebugLoc(AltBB);
+                if (DL) return DL;
+            }
+        }
+    }
+
+    // Nothing helps...
+    return DebugLoc();
 }
 
 void printDebugLoc(const DebugLoc& DbgLoc,

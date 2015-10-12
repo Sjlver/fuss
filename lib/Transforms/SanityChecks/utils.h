@@ -7,27 +7,35 @@
 #include "llvm/IR/DebugLoc.h"
 
 namespace llvm {
+    class BasicBlock;
     class BranchInst;
     class CallInst;
+    class Instruction;
     class LLVMContext;
     class raw_ostream;
 }
 
 struct SanityCheckInstructionsPass;
 
-// Returns true if a given instruction is a call to an aborting, error reporting
-// function
+// Returns true if a given instruction is an instrumentation instruction. This
+// includes assertions, sanity checks, thread sanitizer memory access logging,
+// etc.
+bool isInstrumentation(const llvm::Instruction *I);
+
+// Returns true if the given instruction is an empty inline assembly call.
+// These are inserted by instrumentation tools to ensure that instrumentation
+// code is not optimized away.
+bool isAsmForSideEffect(const llvm::Instruction *I);
+
+// Returns true if a given call aborts the program.
 bool isAbortingCall(const llvm::CallInst *CI);
 
-// Returns the index of the regular branch of a sanity check, i.e., the branch
-// that continues program execution. Returns (unsigned) -1 if such a branch does
-// not exist.
-unsigned int getRegularBranch(llvm::BranchInst *BI,
-        SanityCheckInstructionsPass *SCI);
+// Returns the debug location of a basic block. This is the location of the
+// first instruction in the BB which has debug information.
+llvm::DebugLoc getBasicBlockDebugLoc(llvm::BasicBlock *BB);
 
-// Returns the debug location of a sanity check.
-llvm::DebugLoc getSanityCheckDebugLoc(llvm::BranchInst *BI,
-        unsigned int RegularBranch);
+// Returns the debug location for a piece of instrumentation.
+llvm::DebugLoc getInstrumentationDebugLoc(llvm::Instruction *Inst);
 
 void printDebugLoc(const llvm::DebugLoc& DbgLoc, llvm::LLVMContext &Ctx,
         llvm::raw_ostream &Outs);

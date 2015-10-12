@@ -11,7 +11,7 @@ namespace sanitychecks {
 }
 
 namespace llvm {
-    class BranchInst;
+    class Instruction;
     class raw_ostream;
 }
 
@@ -27,7 +27,7 @@ struct SanityCheckCostPass : public llvm::ModulePass {
     virtual void print(llvm::raw_ostream &O, const llvm::Module *M) const;
 
     // A pair that stores a sanity check and its cost.
-    typedef std::pair<llvm::BranchInst *, uint64_t> CheckCost;
+    typedef std::pair<llvm::Instruction*, uint64_t> CheckCost;
     
     const std::vector<CheckCost> &getCheckCosts() const {
         return CheckCosts;

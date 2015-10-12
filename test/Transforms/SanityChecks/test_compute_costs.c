@@ -24,8 +24,8 @@
 int foo(int *a, int n) {
     int sum = 0;
     for (int i = 0; i < n; ++i) {
-        // Verify that there is a sanity check two lines down, with cost 50.
-        // CHECK: 50 {{.*}}:29
+        // Verify that there is a sanity check two lines down, with cost 60.
+        // CHECK: 60 {{.*}}:29
         sum += a[i];
     }
     return sum;
