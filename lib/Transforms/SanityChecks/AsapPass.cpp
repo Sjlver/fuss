@@ -111,10 +111,12 @@ bool AsapPass::optimizeCheckAway(llvm::Instruction *Inst) {
         dbgs() << ": SanityCheck with cost ";
         dbgs() << *Inst->getMetadata("cost")->getOperand(0);
 
-        if (MDNode *IA = DL.getInlinedAt()) {
-            dbgs() << " (inlined at ";
-            printDebugLoc(DebugLoc(IA), Inst->getContext(), dbgs());
-            dbgs() << ")";
+        if (DL) {
+          if (MDNode *IA = DL.getInlinedAt()) {
+              dbgs() << " (inlined at ";
+              printDebugLoc(DebugLoc(IA), Inst->getContext(), dbgs());
+              dbgs() << ")";
+          }
         }
 
         if (auto *CI = dyn_cast<CallInst>(Inst)) {
