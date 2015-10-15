@@ -1,0 +1,17 @@
+diff -Nur old/Makefile new/Makefile
+--- old/Makefile	2014-12-21 11:26:26.000000000 +0100
++++ new/Makefile	2015-10-15 14:10:48.879321738 +0200
+@@ -65,11 +65,11 @@
+ all: pbzip2
+ 
+ # Standard pbzip2 compile
+-pbzip2: pbzip2.cpp BZ2StreamScanner.cpp ErrorContext.cpp
++pbzip2: pbzip2.o BZ2StreamScanner.o ErrorContext.o
+ 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o pbzip2 $(LDLIBS)
+ 
+ # Choose this if you want to compile in a static version of the libbz2 library
+-pbzip2-static: pbzip2.cpp BZ2StreamScanner.cpp ErrorContext.cpp libbz2.a
++pbzip2-static: pbzip2.o BZ2StreamScanner.o ErrorContext.o libbz2.a
+ 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o pbzip2 -I. -L. $(LDLIBS)
+ 
+ # Install the binary pbzip2 program and man page
