@@ -42,7 +42,7 @@ profiling_file="profiling.\$( echo "\$@" | tr -C -d 'a-zA-Z0-9_-' ).log"
 if [ -f "\$profiling_file" ]; then exit 0; fi
 "$CURRENT_INSTALL_DIR/${EXECUTABLE}.orig" "\$@"
 status=\$?
-cp "\$LOG_FILE" "\$profiling_file"
+cp "\$LOG_FILE" "\$profiling_file" || touch "\$profiling_file"
 exit \$status
 EOF
 chmod u+x "$CURRENT_INSTALL_DIR/$EXECUTABLE"

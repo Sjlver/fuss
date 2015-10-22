@@ -186,12 +186,12 @@ class AsapInitialCompiler < BaseCompiler
 
     # Yet another special case :(
     # ASAP gets quite confused if the same file is used for different purposes
-    # throughout a build. Yet, configure calls all its tests "conftest.c"...
-    # just compile these normally.
+    # throughout a build. Yet, configure calls all its tests "conftest.c" or
+    # "autotest.c"... just compile these normally.
     # TODO: at some point, we might want to store the ASAP state objects with
     # names that depend on the content of the source, rather than the object
     # name.
-    return super if target_name =~ /conftest/
+    return super if target_name =~ /conftest|autotest/
 
     if target_name and target_name.end_with?('.o')
       begin
