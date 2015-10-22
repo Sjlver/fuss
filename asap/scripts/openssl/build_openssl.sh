@@ -8,7 +8,7 @@ source "$SCRIPT_DIR/../python/build_utils.sh"
 export CC="$( which asap-clang )"
 export CXX="$( which asap-clang++ )"
 
-CFLAGS_BASE=( -fno-omit-frame-pointer -fno-sanitize-recover=all
+CFLAGS_BASE=( -fno-omit-frame-pointer
               -fsanitize-blacklist="$SCRIPT_DIR/asan_blacklist.txt"
               -DOPENSSL_NO_HW_PADLOCK -DOPENSSL_NO_BUF_FREELISTS )
 CFLAGS_ASAN=( -fsanitize=address "${CFLAGS_BASE[@]}" )

@@ -72,7 +72,7 @@ fetch_python
 
 build_asap_initial "cpython" "baseline" "configure_and_build_python" "-O3" ""
 build_asap_initial "cpython" "asan" "configure_and_build_python" "-O3 -fsanitize=address" "-fsanitize=address"
-build_asap_initial "cpython" "ubsan" "configure_and_build_python" "-O3 -fsanitize=undefined -fno-sanitize-recover=all" "-fsanitize=undefined"
+build_asap_initial "cpython" "ubsan" "configure_and_build_python" "-O3 -fsanitize=undefined" "-fsanitize=undefined"
 
 for tool in "asan" "ubsan"; do
     build_asap_coverage "cpython" "$tool" "build_and_test_python"

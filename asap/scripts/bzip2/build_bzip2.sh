@@ -8,7 +8,7 @@ source "$SCRIPT_DIR/../python/build_utils.sh"
 ASAN_CFLAGS="-fsanitize=address"
 ASAN_LDFLAGS="-fsanitize=address"
 
-UBSAN_CFLAGS="-fsanitize=undefined -fno-sanitize=shift -fno-sanitize-recover=all"
+UBSAN_CFLAGS="-fsanitize=undefined"
 UBSAN_LDFLAGS="-fsanitize=undefined"
 
 TSAN_CFLAGS="-fsanitize=thread"

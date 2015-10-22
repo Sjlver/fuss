@@ -70,8 +70,8 @@ for costlevel in 1.000 0.010; do
     current_testname="ubsan-c$( echo $costlevel | tr -C -d '0-9' )"
     if [ "$testname" = "$current_testname" ]; then
         echo "  Install $current_testname for $benchmark"
-        CFLAGS="-O3 -fsanitize=undefined -fno-sanitize-recover=all" \
-            CXXFLAGS="-O3 -fsanitize=undefined -fno-sanitize-recover=all" \
+        CFLAGS="-O3 -fsanitize=undefined" \
+            CXXFLAGS="-O3 -fsanitize=undefined" \
             LDFLAGS="-fsanitize=undefined" \
             "$SCRIPT_DIR/phoronix-asap.sh" $benchmark "$current_testname" -asap-cost-level=$costlevel
     fi
@@ -81,8 +81,8 @@ for sanitylevel in 0.990 0.980 0.950 0.900 0.800 0.500 0.000; do
     current_testname="ubsan-s$( echo $sanitylevel | tr -C -d '0-9' )"
     if [ "$testname" = "$current_testname" ]; then
         echo "  Install $current_testname for $benchmark"
-        CFLAGS="-O3 -fsanitize=undefined -fno-sanitize-recover=all" \
-            CXXFLAGS="-O3 -fsanitize=undefined -fno-sanitize-recover=all" \
+        CFLAGS="-O3 -fsanitize=undefined" \
+            CXXFLAGS="-O3 -fsanitize=undefined" \
             LDFLAGS="-fsanitize=undefined" \
             "$SCRIPT_DIR/phoronix-asap.sh" $benchmark "$current_testname" -asap-sanity-level=$sanitylevel
     fi
