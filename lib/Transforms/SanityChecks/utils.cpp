@@ -33,7 +33,7 @@ bool isInstrumentation(const Instruction *I) {
     if (auto *CI = dyn_cast<const CallInst>(I)) {
         if (CI->getCalledFunction()) {
             StringRef name = CI->getCalledFunction()->getName();
-            if (name.startswith("__ubsan_") && name.endswith("_abort")) {
+            if (name.startswith("__ubsan_handle_")) {
                 return OptimizeSanityChecks;
             }
             if (name.startswith("__softboundcets_") && name.endswith("_abort")) {
