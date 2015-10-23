@@ -9,7 +9,7 @@ ARGV.each do |filename|
     doc = Nokogiri::XML(f)
     doc.xpath('//Result').each do |r|
       identifier = r.xpath('Identifier').text
-      raise "Strange identifier" unless identifier =~ /^local\/.*-(asan-[0-9a-z]*|ubsan-[0-9a-z]*|baseline)$/
+      raise "Strange identifier" unless identifier =~ /^local\/.*-(tsan-[0-9a-z]*|asan-[0-9a-z]*|ubsan-[0-9a-z]*|baseline)$/
 
       variable = $1
       benchmark = "#{r.xpath('Title').text} - #{r.xpath('Description').text}"
