@@ -13,46 +13,48 @@ using namespace llvm;
 
 namespace {
 
-    // This pass can be useful when we depend on atexit() functions to be
-    // called. This happens, for instance, when we would like profiling counters
-    // to be written out even if the program is aborted.
-    struct ExitInsteadOfAbortPass : public FunctionPass {
-        static char ID;
+// This pass can be useful when we depend on atexit() functions to be
+// called. This happens, for instance, when we would like profiling counters
+// to be written out even if the program is aborted.
+struct ExitInsteadOfAbortPass : public FunctionPass {
+  static char ID;
 
-        ExitInsteadOfAbortPass() : FunctionPass(ID) {}
+  ExitInsteadOfAbortPass() : FunctionPass(ID) {}
 
-        virtual bool runOnFunction(Function &F) {
-            // Setup functions and exit values
-            Module *M = F.getParent();
-            LLVMContext &Ctx = M->getContext();
-            Constant *ExitFunction = M->getOrInsertFunction("exit",
-                    Type::getVoidTy(Ctx),
-                    Type::getInt32Ty(Ctx),
-                    NULL);
-            // I think 27 is a great return value :-)
-            Constant *ExitValue = ConstantInt::get(Type::getInt32Ty(Ctx), 27);
+  virtual bool runOnFunction(Function &F) {
+    // Setup functions and exit values
+    Module *M = F.getParent();
+    LLVMContext &Ctx = M->getContext();
+    Constant *ExitFunction = M->getOrInsertFunction(
+        "exit", Type::getVoidTy(Ctx), Type::getInt32Ty(Ctx), NULL);
+    // I think 27 is a great return value :-)
+    Constant *ExitValue = ConstantInt::get(Type::getInt32Ty(Ctx), 27);
 
-            std::vector<CallInst *> CallsToReplace;
-            for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
-                Instruction *Inst = &*I;
-                if (CallInst *CI = dyn_cast<CallInst>(Inst)) {
-                    if (isAbortingCall(CI)) {
-                        CallsToReplace.push_back(CI);
-                    }
-                }
-            }
-            IRBuilder<> Builder(Ctx);
-            for (Instruction *Inst : CallsToReplace) {
-                Builder.SetInsertPoint(Inst);
-                Builder.SetCurrentDebugLocation(Inst->getDebugLoc());
-                Builder.CreateCall(ExitFunction, ExitValue);
-                Inst->eraseFromParent();
-            }
-
-            return false;
+    std::vector<CallInst *> CallsToReplace;
+    for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
+      Instruction *Inst = &*I;
+      if (CallInst *CI = dyn_cast<CallInst>(Inst)) {
+        if (isAbortingCall(CI)) {
+          CallsToReplace.push_back(CI);
         }
-    };
+      }
+    }
+    IRBuilder<> Builder(Ctx);
+    for (Instruction *Inst : CallsToReplace) {
+      Builder.SetInsertPoint(Inst);
+      Builder.SetCurrentDebugLocation(Inst->getDebugLoc());
+      Builder.CreateCall(ExitFunction, ExitValue);
+      Inst->eraseFromParent();
+    }
+
+    return false;
+  }
+};
+
 }
 
 char ExitInsteadOfAbortPass::ID = 0;
-static RegisterPass<ExitInsteadOfAbortPass> X("exit-instead-of-abort", "Transforms calls to abort and similar functions into clean exits", false, false);
+static RegisterPass<ExitInsteadOfAbortPass>
+    X("exit-instead-of-abort",
+      "Transforms calls to abort and similar functions into clean exits", false,
+      false);

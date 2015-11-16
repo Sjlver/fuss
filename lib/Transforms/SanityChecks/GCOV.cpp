@@ -127,58 +127,62 @@ void GCOVFile::collectLineCounts(FileInfo &FI) {
 }
 
 uint64_t GCOVFile::getCount(Instruction *Inst) const {
-    BasicBlock *ParentB = Inst->getParent();
-    Function   *ParentF = Inst->getParent()->getParent();
-    const GCOVFunction *F = getFunction(ParentF);
-    if (!F) {
-        // FIXME: Sometimes GCOV data seems to be missing some functions.
-        // I haven't yet found out why this is so. I currently silently ignore
-        // the issue, but this might cause problems.
-        DEBUG(dbgs() << "Warning: could not find function "
-                     << ParentF->getName()
-                     << " in GCOV data\n");
-        return 0;
-    }
-    
-    // Find the offset of the block inside its function, and take the GCOV block
-    // at the same offset.
-    // FIXME: This could break very easily, if the order in which GCOV handles
-    //        blocks changes... we try to assert on the shape of the CFG, but
-    //        there is no real guarantee.
-    
-    // GCOVProfiler::emitProfileNotes() splits the entry block of the function.
-    // It also adds a "return block", which is always the last block.
-    // Hence the first and last block of the GCOVFunction are unused, and hence
-    // the +2.
-    assert(ParentF->size() + 2 == F->getNumBlocks()
-            && "Function size does not match GCOV data?");
-    Function::iterator ParentBI = ParentF->begin();
-    GCOVFunction::BlockIterator BI = F->block_begin();
-    ++BI;  // Skip split entry block
-    while (ParentBI != ParentF->end() && &(*ParentBI) != ParentB) {
-        assert(((isa<ReturnInst>(ParentBI->getTerminator()) && BI->getNumDstEdges() == 1) ||
-                (ParentBI->getTerminator()->getNumSuccessors() == BI->getNumDstEdges()))
-                && "CFG mismatch: dst edges");
-        ++ParentBI;
-        ++BI;
-    }
-    assert(ParentBI != ParentF->end()
-            && "Basic block not a member of its parent function?.");
-    assert(((isa<ReturnInst>(ParentBI->getTerminator()) && BI->getNumDstEdges() == 1) ||
-            (ParentBI->getTerminator()->getNumSuccessors() == BI->getNumDstEdges()))
-            && "CFG mismatch: dst edges");
-    
-    return BI->getCount();
+  BasicBlock *ParentB = Inst->getParent();
+  Function *ParentF = Inst->getParent()->getParent();
+  const GCOVFunction *F = getFunction(ParentF);
+  if (!F) {
+    // FIXME: Sometimes GCOV data seems to be missing some functions.
+    // I haven't yet found out why this is so. I currently silently ignore
+    // the issue, but this might cause problems.
+    DEBUG(dbgs() << "Warning: could not find function " << ParentF->getName()
+                 << " in GCOV data\n");
+    return 0;
+  }
+
+  // Find the offset of the block inside its function, and take the GCOV block
+  // at the same offset.
+  // FIXME: This could break very easily, if the order in which GCOV handles
+  //        blocks changes... we try to assert on the shape of the CFG, but
+  //        there is no real guarantee.
+
+  // GCOVProfiler::emitProfileNotes() splits the entry block of the function.
+  // It also adds a "return block", which is always the last block.
+  // Hence the first and last block of the GCOVFunction are unused, and hence
+  // the +2.
+  assert(ParentF->size() + 2 == F->getNumBlocks() &&
+         "Function size does not match GCOV data?");
+  Function::iterator ParentBI = ParentF->begin();
+  GCOVFunction::BlockIterator BI = F->block_begin();
+  ++BI; // Skip split entry block
+  while (ParentBI != ParentF->end() && &(*ParentBI) != ParentB) {
+    assert(((isa<ReturnInst>(ParentBI->getTerminator()) &&
+             BI->getNumDstEdges() == 1) ||
+            (ParentBI->getTerminator()->getNumSuccessors() ==
+             BI->getNumDstEdges())) &&
+           "CFG mismatch: dst edges");
+    ++ParentBI;
+    ++BI;
+  }
+  assert(ParentBI != ParentF->end() &&
+         "Basic block not a member of its parent function?.");
+  assert(((isa<ReturnInst>(ParentBI->getTerminator()) &&
+           BI->getNumDstEdges() == 1) ||
+          (ParentBI->getTerminator()->getNumSuccessors() ==
+           BI->getNumDstEdges())) &&
+         "CFG mismatch: dst edges");
+
+  return BI->getCount();
 }
 
-const GCOVFunction *GCOVFile::getFunction(const Function* F) const {
-    for (const auto &Fptr : Functions) {
-        // FIXME: somehow returning a pointer defeats the use of std::unique_ptr
-        // here. Is there a way to do this properly?
-        if (Fptr->getName() == F->getName()) return Fptr.get();
-    }
-    
-    return nullptr;
+const GCOVFunction *GCOVFile::getFunction(const Function *F) const {
+  for (const auto &Fptr : Functions) {
+    // FIXME: somehow returning a pointer defeats the use of std::unique_ptr
+    // here. Is there a way to do this properly?
+    if (Fptr->getName() == F->getName())
+      return Fptr.get();
+  }
+
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -618,8 +622,8 @@ FileInfo::openCoveragePath(StringRef CoveragePath) {
     return llvm::make_unique<raw_null_ostream>();
 
   std::error_code EC;
-  auto OS = llvm::make_unique<raw_fd_ostream>(CoveragePath, EC,
-                                              sys::fs::F_Text);
+  auto OS =
+      llvm::make_unique<raw_fd_ostream>(CoveragePath, EC, sys::fs::F_Text);
   if (EC) {
     errs() << EC.message() << "\n";
     return llvm::make_unique<raw_null_ostream>();

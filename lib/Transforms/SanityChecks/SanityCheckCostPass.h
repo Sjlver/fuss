@@ -7,35 +7,32 @@
 #include <vector>
 
 namespace sanitychecks {
-    class GCOVFile;
+class GCOVFile;
 }
 
 namespace llvm {
-    class Instruction;
-    class raw_ostream;
+class Instruction;
+class raw_ostream;
 }
 
 struct SanityCheckCostPass : public llvm::ModulePass {
-    static char ID;
+  static char ID;
 
-    SanityCheckCostPass() : ModulePass(ID) {}
+  SanityCheckCostPass() : ModulePass(ID) {}
 
-    virtual bool runOnModule(llvm::Module &M);
+  virtual bool runOnModule(llvm::Module &M);
 
-    virtual void getAnalysisUsage(llvm::AnalysisUsage& AU) const;
-    
-    virtual void print(llvm::raw_ostream &O, const llvm::Module *M) const;
+  virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
 
-    // A pair that stores a sanity check and its cost.
-    typedef std::pair<llvm::Instruction*, uint64_t> CheckCost;
-    
-    const std::vector<CheckCost> &getCheckCosts() const {
-        return CheckCosts;
-    };
+  virtual void print(llvm::raw_ostream &O, const llvm::Module *M) const;
+
+  // A pair that stores a sanity check and its cost.
+  typedef std::pair<llvm::Instruction *, uint64_t> CheckCost;
+
+  const std::vector<CheckCost> &getCheckCosts() const { return CheckCosts; };
 
 private:
+  std::vector<CheckCost> CheckCosts;
 
-    std::vector<CheckCost> CheckCosts;
-    
-    sanitychecks::GCOVFile *createGCOVFile();
+  sanitychecks::GCOVFile *createGCOVFile();
 };

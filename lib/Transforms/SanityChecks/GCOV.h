@@ -30,8 +30,8 @@
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
-    class Function;
-    class Instruction;
+class Function;
+class Instruction;
 }
 
 namespace sanitychecks {
@@ -240,7 +240,8 @@ public:
 
   bool readString(std::string &Str) {
     StringRef StrRef;
-    if (!readString(StrRef)) return false;
+    if (!readString(StrRef))
+      return false;
     Str = StrRef;
     return true;
   }
@@ -268,7 +269,7 @@ public:
 
   // Returns the number of times a given instruction has been executed.
   uint64_t getCount(llvm::Instruction *Inst) const;
-  
+
 private:
   bool GCNOInitialized;
   GCOV::GCOVVersion Version;
@@ -276,7 +277,7 @@ private:
   SmallVector<std::unique_ptr<GCOVFunction>, 16> Functions;
   uint32_t RunCount;
   uint32_t ProgramCount;
-  
+
   // Finds the GCOVFunction corresponding to the given LLVM function
   // FIXME this is not very reliable, as we find functions by name only.
   const GCOVFunction *getFunction(const llvm::Function *F) const;

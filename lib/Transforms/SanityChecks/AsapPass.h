@@ -4,30 +4,29 @@
 #include "llvm/Pass.h"
 
 namespace sanitychecks {
-    class GCOVFile;
+class GCOVFile;
 }
 
 namespace llvm {
-    class Instruction;
+class Instruction;
 }
 
 struct SanityCheckCostPass;
 struct SanityCheckInstructionsPass;
 
 struct AsapPass : public llvm::ModulePass {
-    static char ID;
+  static char ID;
 
-    AsapPass() : ModulePass(ID), SCC(0), SCI(0) {}
+  AsapPass() : ModulePass(ID), SCC(0), SCI(0) {}
 
-    virtual bool runOnModule(llvm::Module &M);
+  virtual bool runOnModule(llvm::Module &M);
 
-    virtual void getAnalysisUsage(llvm::AnalysisUsage& AU) const;
+  virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
 
 private:
+  SanityCheckCostPass *SCC;
+  SanityCheckInstructionsPass *SCI;
 
-    SanityCheckCostPass *SCC;
-    SanityCheckInstructionsPass *SCI;
-    
-    // Tries to remove a sanity check; returns true if it worked.
-    bool optimizeCheckAway(llvm::Instruction *Inst);
+  // Tries to remove a sanity check; returns true if it worked.
+  bool optimizeCheckAway(llvm::Instruction *Inst);
 };

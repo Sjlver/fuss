@@ -2,17 +2,17 @@
 // Please see LICENSE.txt for copyright and licensing information.
 
 #ifndef SANITYCHECKS_UTILS_H
-#define	SANITYCHECKS_UTILS_H
+#define SANITYCHECKS_UTILS_H
 
 #include "llvm/IR/DebugLoc.h"
 
 namespace llvm {
-    class BasicBlock;
-    class BranchInst;
-    class CallInst;
-    class Instruction;
-    class LLVMContext;
-    class raw_ostream;
+class BasicBlock;
+class BranchInst;
+class CallInst;
+class Instruction;
+class LLVMContext;
+class raw_ostream;
 }
 
 struct SanityCheckInstructionsPass;
@@ -37,8 +37,7 @@ llvm::DebugLoc getBasicBlockDebugLoc(llvm::BasicBlock *BB);
 // Returns the debug location for a piece of instrumentation.
 llvm::DebugLoc getInstrumentationDebugLoc(llvm::Instruction *Inst);
 
-void printDebugLoc(const llvm::DebugLoc& DbgLoc, llvm::LLVMContext &Ctx,
-        llvm::raw_ostream &Outs);
+void printDebugLoc(const llvm::DebugLoc &DbgLoc, llvm::LLVMContext &Ctx,
+                   llvm::raw_ostream &Outs);
 
-#endif	/* SANITYCHECKS_UTILS_H */
-
+#endif /* SANITYCHECKS_UTILS_H */
