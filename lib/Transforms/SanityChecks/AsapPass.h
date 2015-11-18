@@ -3,10 +3,6 @@
 
 #include "llvm/Pass.h"
 
-namespace sanitychecks {
-class GCOVFile;
-}
-
 namespace llvm {
 class Instruction;
 }
