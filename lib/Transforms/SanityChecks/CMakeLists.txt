@@ -10,6 +10,7 @@ add_llvm_loadable_module(SanityChecks
   SanityCheckCostPass.cpp
   SanityCheckInstructionsPass.cpp
   utils.cpp
+  WrapInSuperbranchPass.cpp
 )
 
 add_dependencies(SanityChecks LLVMInstrumentation)
