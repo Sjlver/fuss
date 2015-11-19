@@ -11,6 +11,7 @@ namespace llvm {
 class AnalysisUsage;
 class BasicBlock;
 class CallInst;
+class DominatorTree;
 class Function;
 class Instruction;
 class Value;
@@ -37,19 +38,12 @@ struct SanityCheckInstructionsPass : public llvm::ModulePass {
     return SanityCheckRoots.at(F);
   }
 
-  const BlockSet &getSanityCheckBlocks(llvm::Function *F) const {
-    return SanityCheckBlocks.at(F);
-  }
-
   const InstructionSet &
   getInstructionsBySanityCheck(llvm::Instruction *Inst) const {
     return InstructionsBySanityCheck.at(Inst);
   }
 
 private:
-  // All blocks that contain only sanity check instructions
-  std::map<llvm::Function *, BlockSet> SanityCheckBlocks;
-
   // All instructions that belong to sanity checks
   std::map<llvm::Function *, InstructionSet> SanityCheckInstructions;
 
@@ -68,6 +62,12 @@ private:
   // Determines whether a given value is only used by sanity check
   // instructions, and nowhere else in the program.
   bool onlyUsedInSanityChecks(llvm::Value *V);
+
+  // Determines whether a given instruction dominates only instructions from a
+  // given set, and no other instructions.
+  bool onlyDominatesInstructionsFrom(llvm::Instruction *I,
+                                    const InstructionSet &Instrs,
+                                    const llvm::DominatorTree &DT);
 
   // Determines whether a given block contains only instructions from a
   // given set, and no other instructions.

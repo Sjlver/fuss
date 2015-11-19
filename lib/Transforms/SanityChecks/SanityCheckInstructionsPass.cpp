@@ -7,6 +7,7 @@
 
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Pass.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Metadata.h"
@@ -20,7 +21,6 @@ using namespace llvm;
 bool SanityCheckInstructionsPass::runOnModule(Module &M) {
   for (Function &F : M) {
     DEBUG(dbgs() << "SanityCheckInstructionsPass on " << F.getName() << "\n");
-    SanityCheckBlocks[&F] = BlockSet();
     SanityCheckInstructions[&F] = InstructionSet();
     SanityCheckRoots[&F] = InstructionSet();
     findInstructions(&F);
@@ -35,6 +35,10 @@ bool SanityCheckInstructionsPass::runOnModule(Module &M) {
 }
 
 void SanityCheckInstructionsPass::findInstructions(Function *F) {
+  if (F->empty()) {
+    return;
+  }
+
   // A list of instructions that are used by sanity checks. They become sanity
   // check instructions if it turns out they're not used by anything else.
   SmallPtrSet<Instruction *, 128> Worklist;
@@ -46,6 +50,11 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
 
   // A map from instructions to the checks that use them.
   std::map<Instruction *, SmallPtrSet<Instruction *, 4>> ChecksByInstruction;
+
+  // A dominator tree that we need to determine whether terminators are sanity
+  // check instructions.
+  DominatorTree DT;
+  DT.recalculate(*F);
 
   // Initialize the work list.
   for (BasicBlock &BB : *F) {
@@ -105,15 +114,16 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
       }
     }
 
-    // ... and checking whether this causes basic blocks to contain only
-    // sanity checks. This would in turn cause terminators to be added to
-    // the worklist.
+    // ... and checking whether this causes basic blocks to dominate only
+    // sanity check instructions. This would imply that branches to these
+    // blocks could be eliminated, and would cause the corresponding
+    // terminators to be added to the worklist.
     while (!BlockWorklist.empty()) {
       BasicBlock *BB = *BlockWorklist.begin();
       BlockWorklist.erase(BB);
 
-      if (onlyContainsInstructionsFrom(
-              BB, SanityCheckInstructions.at(BB->getParent()))) {
+      if (onlyDominatesInstructionsFrom(
+              BB->begin(), SanityCheckInstructions.at(BB->getParent()), DT)) {
         for (User *U : BB->users()) {
           if (Instruction *Inst = dyn_cast<Instruction>(U)) {
             Worklist.insert(Inst);
@@ -142,6 +152,16 @@ bool SanityCheckInstructionsPass::onlyUsedInSanityChecks(Value *V) {
     }
   }
   return true;
+}
+
+bool SanityCheckInstructionsPass::onlyDominatesInstructionsFrom(
+    Instruction *I, const InstructionSet &Instrs, const DominatorTree &DT) {
+  SmallVector<BasicBlock *, 8> dominatedBBs;
+  DT.getDescendants(I->getParent(), dominatedBBs);
+  return std::all_of(dominatedBBs.begin(), dominatedBBs.end(),
+                     [this, &Instrs](BasicBlock *BB) {
+                       return onlyContainsInstructionsFrom(BB, Instrs);
+                     });
 }
 
 bool SanityCheckInstructionsPass::onlyContainsInstructionsFrom(
