@@ -4,6 +4,7 @@
 #ifndef SANITYCHECKS_UTILS_H
 #define SANITYCHECKS_UTILS_H
 
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/IR/DebugLoc.h"
 
 namespace llvm {
@@ -14,6 +15,10 @@ class Instruction;
 class LLVMContext;
 class raw_ostream;
 }
+
+// Types used to store sanity check blocks / instructions
+typedef llvm::SmallPtrSet<llvm::BasicBlock *, 64> BlockSet;
+typedef llvm::SmallPtrSet<llvm::Instruction *, 64> InstructionSet;
 
 struct SanityCheckInstructionsPass;
 
@@ -39,5 +44,10 @@ llvm::DebugLoc getInstrumentationDebugLoc(llvm::Instruction *Inst);
 
 void printDebugLoc(const llvm::DebugLoc &DbgLoc, llvm::LLVMContext &Ctx,
                    llvm::raw_ostream &Outs);
+
+// Sets begin and end pointers to the entry and exit instructions
+// from the instruction set @instrs
+bool getRegionFromInstructionSet(const InstructionSet &instrs,
+    llvm::Instruction **begin, llvm::Instruction **end);
 
 #endif /* SANITYCHECKS_UTILS_H */

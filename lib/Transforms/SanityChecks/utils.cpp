@@ -146,3 +146,72 @@ void printDebugLoc(const DebugLoc &DbgLoc, LLVMContext &Ctx,
     Outs << ':' << DL->getColumn();
   }
 }
+
+bool getRegionFromInstructionSet(const InstructionSet &instrs,
+    Instruction **begin, Instruction **end) {
+
+  //Find a predecessor for each instruction in the set (and for instructions
+  // that succeed those in the set).
+  DenseMap<Instruction*, Instruction*> predecessors;
+  for (auto ins : instrs) {
+    // Ensure each instruction from the set is in the map
+    if (!predecessors.count(ins)) {
+      predecessors[ins] = nullptr;
+    }
+
+    // Handle instructions in the middle of basic blocks
+    Instruction* successor = ins->getNextNode();
+    if (successor && successor != ins->getParent()->end()) {
+      //DEBUG(dbgs() << "Found successor inline: " << *ins << " -> " << *successor << "\n");
+      predecessors[successor] = ins;
+      continue;
+    }
+
+    // No successor? Then it must be a terminator. These are succeeded by the
+    // basic blocks they branch to.
+    TerminatorInst *tins = cast<TerminatorInst>(ins);
+    for (unsigned i = 0, e = tins->getNumSuccessors(); i < e; ++i) {
+      BasicBlock *successorBB = tins->getSuccessor(i);
+      successor = successorBB->begin();
+      //DEBUG(dbgs() << "Found successor from terminator: " << *ins << " -> " << *successor << "\n");
+      predecessors[successor] = ins;
+    }
+  }
+
+  // Now look through the predecessors map to find:
+  // - an instruction in the set with no predecessor => the entry of the region
+  // - an instruction not in the set => the exit of the region
+  Instruction *entryIns = nullptr;
+  Instruction *exitIns = nullptr;
+  for (auto pred : predecessors) {
+    if (pred.second == nullptr) {
+      //DEBUG(dbgs() << "Found entry: " << *pred.first << "\n");
+      if (entryIns == nullptr) {
+        entryIns = pred.first;
+      } else {
+        // Multiple entry nodes... bail out because we don't handle this case.
+        entryIns = nullptr;
+        break;
+      }
+    } else if (!instrs.count(pred.first)) {
+      //DEBUG(dbgs() << "Found exit: " << *pred.first << "\n");
+      if (exitIns == nullptr) {
+        exitIns = pred.first;
+      } else {
+        // Multiple exit nodes... bail out because we don't handle this case.
+        exitIns = nullptr;
+        break;
+      }
+    }
+  }
+
+  if (entryIns && exitIns) {
+    if (begin != NULL)
+      *begin = entryIns;
+    if (end != NULL)
+      *end = exitIns;
+    return true;
+  }
+
+  return false;
+}

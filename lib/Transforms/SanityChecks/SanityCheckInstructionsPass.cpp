@@ -2,7 +2,6 @@
 // Please see LICENSE.txt for copyright and licensing information.
 
 #include "SanityCheckInstructionsPass.h"
-#include "utils.h"
 
 #include <algorithm>
 
