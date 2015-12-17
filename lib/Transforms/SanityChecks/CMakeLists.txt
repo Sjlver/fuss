@@ -8,6 +8,7 @@ add_llvm_loadable_module(SanityChecks
   GCOV.cpp
   SanityCheckCostPass.cpp
   SanityCheckInstructionsPass.cpp
+  OverheadEstimationPass.cpp
   utils.cpp
 )
 
