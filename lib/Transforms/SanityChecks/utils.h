@@ -45,8 +45,9 @@ llvm::DebugLoc getInstrumentationDebugLoc(llvm::Instruction *Inst);
 void printDebugLoc(const llvm::DebugLoc &DbgLoc, llvm::LLVMContext &Ctx,
                    llvm::raw_ostream &Outs);
 
-// Sets begin and end pointers to the entry and exit instructions
-// from the instruction set @instrs
+// Determines the first and one-past-last instruction of a given instruction
+// set, via output parameters `begin` and `end`. Returns false if the set
+// does not form a contiguous single-entry-single-exit region.
 bool getRegionFromInstructionSet(const InstructionSet &instrs,
     llvm::Instruction **begin, llvm::Instruction **end);
 
