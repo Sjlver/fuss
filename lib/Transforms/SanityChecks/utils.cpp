@@ -206,9 +206,9 @@ bool getRegionFromInstructionSet(const InstructionSet &instrs,
   }
 
   if (entryIns && exitIns) {
-    if (begin != NULL)
+    if (begin != nullptr)
       *begin = entryIns;
-    if (end != NULL)
+    if (end != nullptr)
       *end = exitIns;
     return true;
   }
