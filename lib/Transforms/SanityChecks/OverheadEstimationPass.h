@@ -16,7 +16,7 @@ struct SanityCheckInstructionsPass;
 struct OverheadEstimationPass : public llvm::ModulePass {
   static char ID;
 
-  OverheadEstimationPass() : ModulePass(ID), SCI(0) {}
+  OverheadEstimationPass() : ModulePass(ID), SCI(nullptr) {}
 
   virtual bool runOnModule(llvm::Module &M);
 

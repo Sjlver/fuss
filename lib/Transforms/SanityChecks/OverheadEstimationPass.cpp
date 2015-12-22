@@ -21,16 +21,21 @@ bool OverheadEstimationPass::runOnModule(Module &M) {
   Type *ty = Type::getInt64Ty(M.getContext());
   GlobalVariable *sanity_counter = new GlobalVariable(M,
       ty, false, GlobalValue::ExternalLinkage,
-      0, "no_cycles");
+      0, "__asap_num_cycles");
 
   for (auto &func : M) {
     for (auto sc : SCI->getSanityCheckRoots(&func)) {
       auto &instrs = SCI->getInstructionsBySanityCheck(sc);
       Instruction *begin = nullptr;
-      getRegionFromInstructionSet(instrs, &begin, NULL);
+      getRegionFromInstructionSet(instrs, &begin, nullptr);
 
-      if (!begin)
+      if (!begin) {
+        DEBUG(
+          dbgs() << "[!] The first instruction is not found\n";
+          dbgs() << "Sanitycheck: " << *sc << "\n";
+        );
         continue;
+      }
 
       // Insert counter incrementation instructions
       IRBuilder<> builder(begin);
@@ -48,5 +53,5 @@ void OverheadEstimationPass::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 char OverheadEstimationPass::ID = 0;
-static RegisterPass<OverheadEstimationPass> X("overhead",
+static RegisterPass<OverheadEstimationPass> X("overhead-estimation",
     "Computes the number of checks reached at runtime", false, false);
