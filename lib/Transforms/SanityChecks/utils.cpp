@@ -10,6 +10,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
@@ -28,6 +29,17 @@ static cl::opt<bool> OptimizeThreadSanitizer(
     "asap-optimize-tsan",
     cl::desc("Should ASAP affect TSan runtime library functions?"),
     cl::init(true));
+
+namespace {
+  // Returns the next instruction after inst that is not a debug info
+  // intrinsic.
+  Instruction *skipDbgInfoIntrinsics(Instruction *inst) {
+    while (inst && isa<DbgInfoIntrinsic>(inst)) { 
+      inst = inst->getNextNode();
+    }
+    return inst;
+  }
+}  // anonymous namespace
 
 bool isInstrumentation(const Instruction *I) {
   if (auto *CI = dyn_cast<const CallInst>(I)) {
@@ -150,7 +162,7 @@ void printDebugLoc(const DebugLoc &DbgLoc, LLVMContext &Ctx,
 bool getRegionFromInstructionSet(const InstructionSet &instrs,
     Instruction **begin, Instruction **end) {
 
-  //Find a predecessor for each instruction in the set (and for instructions
+  // Find a predecessor for each instruction in the set (and for instructions
   // that succeed those in the set).
   DenseMap<Instruction*, Instruction*> predecessors;
   for (auto ins : instrs) {
@@ -160,7 +172,7 @@ bool getRegionFromInstructionSet(const InstructionSet &instrs,
     }
 
     // Handle instructions in the middle of basic blocks
-    Instruction* successor = ins->getNextNode();
+    Instruction* successor = skipDbgInfoIntrinsics(ins->getNextNode());
     if (successor && successor != ins->getParent()->end()) {
       //DEBUG(dbgs() << "Found successor inline: " << *ins << " -> " << *successor << "\n");
       predecessors[successor] = ins;
@@ -172,7 +184,7 @@ bool getRegionFromInstructionSet(const InstructionSet &instrs,
     TerminatorInst *tins = cast<TerminatorInst>(ins);
     for (unsigned i = 0, e = tins->getNumSuccessors(); i < e; ++i) {
       BasicBlock *successorBB = tins->getSuccessor(i);
-      successor = successorBB->begin();
+      successor = skipDbgInfoIntrinsics(successorBB->begin());
       //DEBUG(dbgs() << "Found successor from terminator: " << *ins << " -> " << *successor << "\n");
       predecessors[successor] = ins;
     }

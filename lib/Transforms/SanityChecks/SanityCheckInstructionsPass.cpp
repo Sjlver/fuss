@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/Pass.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
@@ -17,6 +18,8 @@
 #define DEBUG_TYPE "sanity-check-instructions"
 
 using namespace llvm;
+
+STATISTIC(NumSanityChecksDetected, "Number of sanity checks detected");
 
 bool SanityCheckInstructionsPass::runOnModule(Module &M) {
   for (Function &F : M) {
@@ -64,6 +67,7 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
         Worklist.insert(&I);
         ChecksByInstruction[&I].insert(&I);
         SanityCheckRoots[F].insert(&I);
+        NumSanityChecksDetected += 1;
         InstrumentationInBB = &I;
       }
 
