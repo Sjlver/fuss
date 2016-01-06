@@ -20,11 +20,4 @@ struct WrapInSuperbranchPass : public llvm::ModulePass {
 
 private:
   SanityCheckInstructionsPass *SCI;
-
-  /// Determines the first and one-past-last instruction of a given instruction
-  /// set, via output parameters `begin` and `end`. Returns false if the set
-  /// does not form a contiguous single-entry-single-exit region.
-  bool getRegionFromInstructionSet(
-      const SanityCheckInstructionsPass::InstructionSet &instrs,
-      llvm::Instruction **begin, llvm::Instruction **end);
 };

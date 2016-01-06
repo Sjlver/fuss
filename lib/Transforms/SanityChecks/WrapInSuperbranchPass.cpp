@@ -5,6 +5,7 @@
 #include "utils.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/MDBuilder.h"
@@ -15,6 +16,9 @@
 
 using namespace llvm;
 
+STATISTIC(NumSanityChecksWrapped, "Number of sanity checks wrapped in superbranches");
+STATISTIC(NumSanityChecksSkipped, "Number of sanity checks skipped");
+
 // FIXME: fix LLVM var names. Is it still "M" with capital M? If yes, I need to
 // adjust my other vars.
 
@@ -22,11 +26,13 @@ bool WrapInSuperbranchPass::runOnModule(Module &M) {
   SCI = &getAnalysis<SanityCheckInstructionsPass>();
 
   // Add a global variable called `__superbranch_enabled` to the module. It is
-  // used as a branch condition in superbranches.
-  Type *ty = Type::getInt1Ty(M.getContext());
-  GlobalVariable *superbranchEnabled = new GlobalVariable(M,
-      ty, false, GlobalValue::InternalLinkage,
-      Constant::getNullValue(ty), "__superbranch_enabled");
+  // used as a branch condition in superbranches. Note that we use an i8
+  // instead of i1 because the compiler generates unnecessary masking code
+  // otherwise.
+  Type *sb_enabled_ty = Type::getInt8Ty(M.getContext());
+  GlobalVariable *superbranch_enabled = new GlobalVariable(M,
+      sb_enabled_ty, false, GlobalValue::WeakODRLinkage,
+      Constant::getNullValue(sb_enabled_ty), "__superbranch_enabled");
 
   for (auto &func : M) {
     for (auto sc : SCI->getSanityCheckRoots(&func)) {
@@ -46,6 +52,7 @@ bool WrapInSuperbranchPass::runOnModule(Module &M) {
       );
 
       if (!begin || !end) {
+        NumSanityChecksSkipped += 1;
         continue;
       }
 
@@ -60,9 +67,12 @@ bool WrapInSuperbranchPass::runOnModule(Module &M) {
       preBB->getTerminator()->eraseFromParent();
       IRBuilder<> builder(preBB);
       MDBuilder mdBuilder(M.getContext());
-      Value *cond = builder.CreateLoad(superbranchEnabled);
-      builder.CreateCondBr(cond, instrumentationBB, postBB,
-          mdBuilder.createBranchWeights(1, 100000));
+      Value *sb_enabled = builder.CreateLoad(superbranch_enabled);
+      Value *cond = builder.CreateICmpEQ(sb_enabled,
+          ConstantInt::getNullValue(sb_enabled_ty));
+      builder.CreateCondBr(cond, postBB, instrumentationBB,
+          mdBuilder.createBranchWeights(100000, 1));
+      NumSanityChecksWrapped += 1;
     }
   }
 
@@ -71,74 +81,6 @@ bool WrapInSuperbranchPass::runOnModule(Module &M) {
 
 void WrapInSuperbranchPass::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<SanityCheckInstructionsPass>();
-}
-
-bool WrapInSuperbranchPass::getRegionFromInstructionSet(
-    const SanityCheckInstructionsPass::InstructionSet &instrs,
-    Instruction **begin, Instruction **end) {
-
-  // Find a predecessor for each instruction in the set (and for instructions
-  // that succeed those in the set).
-  DenseMap<Instruction*, Instruction*> predecessors;
-  for (auto ins : instrs) {
-    // Ensure each instruction from the set is in the map
-    if (!predecessors.count(ins)) {
-      predecessors[ins] = nullptr;
-    }
-
-    // Handle instructions in the middle of basic blocks
-    Instruction* successor = ins->getNextNode();
-    if (successor && successor != ins->getParent()->end()) {
-      //DEBUG(dbgs() << "Found successor inline: " << *ins << " -> " << *successor << "\n");
-      predecessors[successor] = ins;
-      continue;
-    }
-
-    // No successor? Then it must be a terminator. These are succeeded by the
-    // basic blocks they branch to.
-    TerminatorInst *tins = cast<TerminatorInst>(ins);
-    for (unsigned i = 0, e = tins->getNumSuccessors(); i < e; ++i) {
-      BasicBlock *successorBB = tins->getSuccessor(i);
-      successor = successorBB->begin();
-      //DEBUG(dbgs() << "Found successor from terminator: " << *ins << " -> " << *successor << "\n");
-      predecessors[successor] = ins;
-    }
-  }
-
-  // Now look through the predecessors map to find:
-  // - an instruction in the set with no predecessor => the entry of the region
-  // - an instruction not in the set => the exit of the region
-  Instruction *entryIns = nullptr;
-  Instruction *exitIns = nullptr;
-  for (auto pred : predecessors) {
-    if (pred.second == nullptr) {
-      //DEBUG(dbgs() << "Found entry: " << *pred.first << "\n");
-      if (entryIns == nullptr) {
-        entryIns = pred.first;
-      } else {
-        // Multiple entry nodes... bail out because we don't handle this case.
-        entryIns = nullptr;
-        break;
-      }
-    } else if (!instrs.count(pred.first)) {
-      //DEBUG(dbgs() << "Found exit: " << *pred.first << "\n");
-      if (exitIns == nullptr) {
-        exitIns = pred.first;
-      } else {
-        // Multiple exit nodes... bail out because we don't handle this case.
-        exitIns = nullptr;
-        break;
-      }
-    }
-  }
-
-  if (entryIns && exitIns) {
-    *begin = entryIns;
-    *end = exitIns;
-    return true;
-  }
-
-  return false;
 }
 
 char WrapInSuperbranchPass::ID = 0;
