@@ -90,6 +90,8 @@ class AsapState
   def create_compiler()
     if current_state == :initial
       AsapInitialCompiler.new(self)
+    elsif current_state == :custom
+      AsapCustomCompiler.new(self)
     elsif current_state == :coverage
       AsapProfilingCompiler.new(self)
     elsif current_state == :optimize
@@ -106,6 +108,15 @@ class AsapState
   def current_state=(state)
     @current_state = state
     IO.write(File.join(state_path, "current_state"), "#{state}\n")
+  end
+
+  def custom_passes()
+    @custom_passes ||= IO.read(File.join(state_path, "custom_passes")).split
+  end
+
+  def custom_passes=(passes)
+    @custom_passes = passes
+    IO.write(File.join(state_path, "custom_passes"), passes.join("\n") + "\n")
   end
 
   def transition(from, to)
@@ -236,6 +247,32 @@ class AsapInitialCompiler < BaseCompiler
     # If we arrive here, some of the previous steps failed, so just run the
     # command normally.
     super
+  end
+end
+
+
+# Custom compiler. Like regular clang, except that it executes additional
+# passes.
+class AsapCustomCompiler < BaseCompiler
+
+  def do_compile(cmd)
+    target_name = get_arg(cmd, '-o')
+    return super unless target_name and target_name.end_with?('.o')
+
+    # Check whether an .orig.o file exists. Otherwise, ASAP should not touch
+    # the current target.
+    orig_name = mangle(state.objects_path(target_name), '.o', '.orig.o')
+    return super unless File.file?(orig_name)
+
+    # Original file exists; create the target from there
+    custom_name = mangle(state.objects_path(target_name), '.o', '.custom.o')
+    opt_level = get_optlevel_for_llc(cmd)
+    pass_params = state.custom_passes.map { |p| "-#{p}" }
+    run!(find_opt(),
+         '-load', find_asap_lib(),
+         *pass_params, '-o', custom_name, orig_name)
+    run!(find_llc(), opt_level, '-filetype=obj', '-relocation-model=pic',
+         '-o', target_name, custom_name)
   end
 end
 
@@ -467,6 +504,13 @@ def handle_mf_option(argv)
   return false  # continue the compilation anyway
 end
 
+def extract_custom_passes(state, argv)
+  passes = get_arg(argv, '-asap-custom-passes=')
+  raise "Please specify -asap-custom-passes" unless passes
+  passes = passes.split(',')
+  state.custom_passes = passes
+end
+
 def main(argv)
   command = get_arg(argv, /^-asap-[a-z0-9-]+$/, :first)
   if command.nil?
@@ -484,6 +528,17 @@ def main(argv)
     compiler.exec([$0] + argv)
   elsif command == '-asap-init'
     AsapState.initialize_state
+  elsif command == '-asap-custom'
+    state = AsapState.new
+    state.transition(:initial, :custom) do
+      extract_custom_passes(state, argv)
+      puts "Will build a version with the following custom passes:"
+      state.custom_passes.each do |pass|
+        puts "- #{pass}"
+      end
+      puts "Please run:"
+      puts "make clean && make"
+    end
   elsif command == '-asap-coverage'
     state = AsapState.new
     state.transition(:initial, :coverage) do

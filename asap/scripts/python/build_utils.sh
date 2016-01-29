@@ -131,6 +131,37 @@ build_asap_optimized() {
     rsync -a --delete "$build_dir/" "$target_dir"
 }
 
+# Builds a custom version of the program.
+build_asap_custom() {
+    local program="$1"
+    local name="$2"
+    local optname="$3"
+    local passes="$4"
+    shift; shift; shift; shift
+
+    local target_dir="${program}-${name}-${optname}-build"
+    local source_dir="${program}-${name}-initial-build"
+    local build_dir="${program}-${name}-build"
+
+    # Don't rebuild if target folder exists
+    [ -d "$target_dir" ] && return 0
+    if ! [ -d "$source_dir" ]; then
+        echo "Source folder \"$source_dir\" does not exist!" >&2
+        exit 1
+    fi
+
+    rsync -a --delete "$source_dir/" "$build_dir"
+    (
+        cd "$build_dir"
+        export ASAP_STATE_PATH="$(pwd)/asap_state"
+        asap-clang -asap-custom -asap-custom-passes="$passes"
+
+        # Re-build using the build command given as arguments
+        "$@"
+    )
+    rsync -a --delete "$build_dir/" "$target_dir"
+}
+
 # Runs benchmarks in a given folder
 benchmark_asap() {
     local program="$1"
