@@ -266,13 +266,16 @@ class AsapCustomCompiler < BaseCompiler
 
     # Original file exists; create the target from there
     custom_name = mangle(state.objects_path(target_name), '.o', '.custom.o')
+    opt_name = mangle(state.objects_path(target_name), '.o', '.custom.opt.o')
     opt_level = get_optlevel_for_llc(cmd)
     pass_params = state.custom_passes.map { |p| "-#{p}" }
     run!(find_opt(),
          '-load', find_asap_lib(),
          *pass_params, '-o', custom_name, orig_name)
+    run!(find_opt(),
+         opt_level, '-o', opt_name, custom_name)
     run!(find_llc(), opt_level, '-filetype=obj', '-relocation-model=pic',
-         '-o', target_name, custom_name)
+         '-o', target_name, opt_name)
   end
 end
 
