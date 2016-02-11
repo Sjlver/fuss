@@ -72,13 +72,16 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
       }
 
       // If instrumentation is followed by asm instructions for side
-      // effects or unreachable instructions, add them. Such instructions
-      // were added by the instrumentation tool. This is a bit of a
-      // hack...
-      if (InstrumentationInBB &&
-          (isAsmForSideEffect(&I) || isa<UnreachableInst>(&I))) {
-        Worklist.insert(&I);
-        ChecksByInstruction[&I].insert(InstrumentationInBB);
+      // effects, unreachable instructions or an unconditional branch, add
+      // them. Such instructions were added by the instrumentation tool. This
+      // is a bit of a hack...
+      if (InstrumentationInBB) {
+        BranchInst *BI = dyn_cast<BranchInst>(&I);
+        if (isAsmForSideEffect(&I) || isa<UnreachableInst>(&I) ||
+            (BI && BI->isUnconditional())) {
+          Worklist.insert(&I);
+          ChecksByInstruction[&I].insert(InstrumentationInBB);
+        }
       }
     }
   }
