@@ -7,9 +7,9 @@ int foo (int n, int *ptr) {
   // though the then-branch goes to a block which contains only sanity check
   // instructions.
   //
-  // CHECK: %cmp = icmp eq i32 %n, 1
+  // CHECK: icmp eq i32 %n, 1
   // CHECK-NOT: !sanitycheck
-  // CHECK: br i1 %cmp
+  // CHECK: br i1
   if (n == 1) {
     // On the other hand, there should be a sanity check verifying the access
     // to `ptr`.
