@@ -8,7 +8,6 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Pass.h"
-#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Metadata.h"
@@ -21,20 +20,19 @@ using namespace llvm;
 
 STATISTIC(NumSanityChecksDetected, "Number of sanity checks detected");
 
-bool SanityCheckInstructionsPass::runOnModule(Module &M) {
-  for (Function &F : M) {
-    DEBUG(dbgs() << "SanityCheckInstructionsPass on " << F.getName() << "\n");
-    SanityCheckInstructions[&F] = InstructionSet();
-    SanityCheckRoots[&F] = InstructionSet();
-    findInstructions(&F);
+bool SanityCheckInstructionsPass::runOnFunction(Function &F) {
+  DEBUG(dbgs() << "SanityCheckInstructionsPass on " << F.getName() << "\n");
+  SanityCheckInstructions.clear();
+  SanityCheckRoots.clear();
+  InstructionsBySanityCheck.clear();
+  findInstructions(&F);
 
-    MDNode *MD = MDNode::get(M.getContext(), {});
-    for (Instruction *Inst : SanityCheckInstructions[&F]) {
-      Inst->setMetadata("sanitycheck", MD);
-    }
+  MDNode *MD = MDNode::get(F.getContext(), {});
+  for (Instruction *Inst : SanityCheckInstructions) {
+    Inst->setMetadata("sanitycheck", MD);
   }
 
-  return false;
+  return !SanityCheckInstructions.empty();
 }
 
 void SanityCheckInstructionsPass::findInstructions(Function *F) {
@@ -56,8 +54,7 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
 
   // A dominator tree that we need to determine whether terminators are sanity
   // check instructions.
-  DominatorTree DT;
-  DT.recalculate(*F);
+  DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
 
   // Initialize the work list.
   for (BasicBlock &BB : *F) {
@@ -66,7 +63,7 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
       if (isInstrumentation(&I)) {
         Worklist.insert(&I);
         ChecksByInstruction[&I].insert(&I);
-        SanityCheckRoots[F].insert(&I);
+        SanityCheckRoots.insert(&I);
         NumSanityChecksDetected += 1;
         InstrumentationInBB = &I;
       }
@@ -93,7 +90,7 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
       Worklist.erase(Inst);
 
       if (onlyUsedInSanityChecks(Inst)) {
-        if (SanityCheckInstructions[F].insert(Inst).second) {
+        if (SanityCheckInstructions.insert(Inst).second) {
           for (Use &U : Inst->operands()) {
             if (Instruction *Op = dyn_cast<Instruction>(U.get())) {
               Worklist.insert(Op);
@@ -130,7 +127,7 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
       BlockWorklist.erase(BB);
 
       if (onlyDominatesInstructionsFrom(
-              &*BB->begin(), SanityCheckInstructions.at(BB->getParent()), DT)) {
+              &*BB->begin(), SanityCheckInstructions, DT)) {
         for (User *U : BB->users()) {
           if (Instruction *Inst = dyn_cast<Instruction>(U)) {
             Worklist.insert(Inst);
@@ -153,8 +150,7 @@ bool SanityCheckInstructionsPass::onlyUsedInSanityChecks(Value *V) {
     if (!Inst)
       return false;
 
-    Function *F = Inst->getParent()->getParent();
-    if (!(SanityCheckInstructions[F].count(Inst))) {
+    if (!(SanityCheckInstructions.count(Inst))) {
       return false;
     }
   }

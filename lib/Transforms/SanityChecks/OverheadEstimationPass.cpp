@@ -16,7 +16,6 @@
 using namespace llvm;
 
 bool OverheadEstimationPass::runOnModule(Module &M) {
-  SCI = &getAnalysis<SanityCheckInstructionsPass>();
 
   Type *ty = Type::getInt64Ty(M.getContext());
   GlobalVariable *sanity_counter = new GlobalVariable(M,
@@ -24,7 +23,10 @@ bool OverheadEstimationPass::runOnModule(Module &M) {
       0, "__asap_num_cycles");
 
   for (auto &func : M) {
-    for (auto sc : SCI->getSanityCheckRoots(&func)) {
+    if (func.isDeclaration()) continue;
+
+    SCI = &getAnalysis<SanityCheckInstructionsPass>(func);
+    for (auto sc : SCI->getSanityCheckRoots()) {
       auto &instrs = SCI->getInstructionsBySanityCheck(sc);
       Instruction *begin = nullptr;
       getRegionFromInstructionSet(instrs, &begin, nullptr);

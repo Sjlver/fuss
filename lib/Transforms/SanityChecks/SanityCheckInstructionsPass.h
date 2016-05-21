@@ -3,6 +3,7 @@
 
 #include "utils.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/Pass.h"
 
 #include <map>
@@ -22,20 +23,21 @@ class Value;
 
 // TODO: Const-correctness. Shouldn't an InstructionSet contain const instrs?
 
-struct SanityCheckInstructionsPass : public llvm::ModulePass {
+struct SanityCheckInstructionsPass : public llvm::FunctionPass {
   static char ID;
 
-  SanityCheckInstructionsPass() : ModulePass(ID) {}
+  SanityCheckInstructionsPass() : FunctionPass(ID) {}
   virtual ~SanityCheckInstructionsPass() {}
 
-  virtual bool runOnModule(llvm::Module &M);
+  virtual bool runOnFunction(llvm::Function &F);
 
   virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const {
+    AU.addRequired<llvm::DominatorTreeWrapperPass>();
     AU.setPreservesAll();
   }
 
-  const InstructionSet &getSanityCheckRoots(llvm::Function *F) const {
-    return SanityCheckRoots.at(F);
+  const InstructionSet &getSanityCheckRoots() const {
+    return SanityCheckRoots;
   }
 
   const InstructionSet &
@@ -45,11 +47,11 @@ struct SanityCheckInstructionsPass : public llvm::ModulePass {
 
 private:
   // All instructions that belong to sanity checks
-  std::map<llvm::Function *, InstructionSet> SanityCheckInstructions;
+  InstructionSet SanityCheckInstructions;
 
   // All sanity check roots. These are the instructions at the source of a
   // sanity check. For example, a call to __asan_report_read4.
-  std::map<llvm::Function *, InstructionSet> SanityCheckRoots;
+  InstructionSet SanityCheckRoots;
 
   // A map of all instructions on which a given sanity check root
   // instruction depends.

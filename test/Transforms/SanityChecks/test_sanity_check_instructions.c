@@ -20,3 +20,8 @@ int foo(int *a) {
     // CHECK-NOT: load i32* %a{{.*}} !sanitycheck
     return a[0];
 }
+
+// This is just here to check whether the pass can handle multiple functions.
+int bar(int *a) {
+    return a[0];
+}

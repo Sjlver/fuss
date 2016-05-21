@@ -10,12 +10,12 @@ class Instruction;
 struct SanityCheckCostPass;
 struct SanityCheckInstructionsPass;
 
-struct AsapPass : public llvm::ModulePass {
+struct AsapPass : public llvm::FunctionPass {
   static char ID;
 
-  AsapPass() : ModulePass(ID), SCC(0), SCI(0) {}
+  AsapPass() : FunctionPass(ID), SCC(0), SCI(0) {}
 
-  virtual bool runOnModule(llvm::Module &M);
+  virtual bool runOnFunction(llvm::Function &F);
 
   virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
 

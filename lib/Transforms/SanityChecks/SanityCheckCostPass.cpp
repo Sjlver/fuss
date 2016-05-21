@@ -4,7 +4,6 @@
 #include "SanityCheckCostPass.h"
 #include "SanityCheckInstructionsPass.h"
 #include "CostModel.h"
-#include "GCOV.h"
 #include "utils.h"
 
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -37,64 +36,68 @@ bool largerCost(const SanityCheckCostPass::CheckCost &a,
 }
 } // anonymous namespace
 
-bool SanityCheckCostPass::runOnModule(Module &M) {
-  SanityCheckInstructionsPass &SCI = getAnalysis<SanityCheckInstructionsPass>();
+bool SanityCheckCostPass::doInitialization(Module &M) {
+  GF = createGCOVFile();
+  return false;
+}
+
+bool SanityCheckCostPass::runOnFunction(Function &F) {
+  DEBUG(dbgs() << "SanityCheckCostPass on " << F.getName() << "\n");
+  CheckCosts.clear();
+
   TargetTransformInfoWrapperPass &TTIWP =
       getAnalysis<TargetTransformInfoWrapperPass>();
-  std::unique_ptr<sanitychecks::GCOVFile> GF(createGCOVFile());
 
-  for (Function &F : M) {
-    DEBUG(dbgs() << "SanityCheckCostPass on " << F.getName() << "\n");
-    const TargetTransformInfo &TTI = TTIWP.getTTI(F);
+  const TargetTransformInfo &TTI = TTIWP.getTTI(F);
+  SanityCheckInstructionsPass &SCI = getAnalysis<SanityCheckInstructionsPass>();
 
-    for (Instruction *Inst : SCI.getSanityCheckRoots(&F)) {
-      assert(Inst->getParent()->getParent() == &F &&
-             "SCI must only contain instructions of the current function.");
+  for (Instruction *Inst : SCI.getSanityCheckRoots()) {
+    assert(Inst->getParent()->getParent() == &F &&
+           "SCI must only contain instructions of the current function.");
 
 #ifndef NDEBUG
-      int nInstructions = 0;
-      int nFreeInstructions = 0;
-      uint64_t maxCount = 0;
+    int nInstructions = 0;
+    int nFreeInstructions = 0;
+    uint64_t maxCount = 0;
 #endif
 
-      // The cost of a check is the sum of the cost of all instructions
-      // that this check uses.
-      // TODO: If an instruction is used by multiple checks, we need an
-      // intelligent way to handle the nonlinearity.
-      uint64_t Cost = 0;
-      for (Instruction *CI : SCI.getInstructionsBySanityCheck(Inst)) {
-        unsigned CurrentCost = sanitychecks::getInstructionCost(CI, &TTI);
+    // The cost of a check is the sum of the cost of all instructions
+    // that this check uses.
+    // TODO: If an instruction is used by multiple checks, we need an
+    // intelligent way to handle the nonlinearity.
+    uint64_t Cost = 0;
+    for (Instruction *CI : SCI.getInstructionsBySanityCheck(Inst)) {
+      unsigned CurrentCost = sanitychecks::getInstructionCost(CI, &TTI);
 
-        // Assume a default cost of 1 for unknown instructions
-        if (CurrentCost == (unsigned)(-1)) {
-          CurrentCost = 1;
-        }
-
-        DEBUG(if (CurrentCost == 0) { nFreeInstructions += 1; });
-
-        assert(CurrentCost <= 100 && "Outlier cost value?");
-
-        Cost += CurrentCost * GF->getCount(CI);
-        DEBUG(nInstructions += 1);
-        DEBUG(
-            if (GF->getCount(CI) > maxCount) { maxCount = GF->getCount(CI); });
+      // Assume a default cost of 1 for unknown instructions
+      if (CurrentCost == (unsigned)(-1)) {
+        CurrentCost = 1;
       }
 
-      APInt CountInt = APInt(64, Cost);
-      MDNode *MD = MDNode::get(
-          M.getContext(), {ConstantAsMetadata::get(ConstantInt::get(
-                              Type::getInt64Ty(M.getContext()), CountInt))});
-      Inst->setMetadata("cost", MD);
-      CheckCosts.push_back(std::make_pair(Inst, Cost));
+      DEBUG(if (CurrentCost == 0) { nFreeInstructions += 1; });
 
-      DEBUG(dbgs() << "Sanity check: " << *Inst << "\n";
-            DebugLoc DL = getInstrumentationDebugLoc(Inst);
-            printDebugLoc(DL, M.getContext(), dbgs());
-            dbgs() << "\nnInstructions: " << nInstructions << "\n";
-            dbgs() << "nFreeInstructions: " << nFreeInstructions << "\n";
-            dbgs() << "maxCount: " << maxCount << "\n";
-            dbgs() << "Cost: " << Cost << "\n";);
+      assert(CurrentCost <= 100 && "Outlier cost value?");
+
+      Cost += CurrentCost * GF->getCount(CI);
+      DEBUG(nInstructions += 1);
+      DEBUG(
+          if (GF->getCount(CI) > maxCount) { maxCount = GF->getCount(CI); });
     }
+
+    APInt CountInt = APInt(64, Cost);
+    MDNode *MD = MDNode::get(
+        F.getContext(), {ConstantAsMetadata::get(ConstantInt::get(
+                            Type::getInt64Ty(F.getContext()), CountInt))});
+    Inst->setMetadata("cost", MD);
+    CheckCosts.push_back(std::make_pair(Inst, Cost));
+
+    DEBUG(dbgs() << "Sanity check: " << *Inst << "\n";
+          DebugLoc DL = getInstrumentationDebugLoc(Inst);
+          printDebugLoc(DL, F.getContext(), dbgs());
+          dbgs() << "\nnInstructions: " << nInstructions << "\n";
+          dbgs() << "nFreeInstructions: " << nFreeInstructions << "\n";
+          dbgs() << "maxCount: " << maxCount << "\n";
+          dbgs() << "Cost: " << Cost << "\n";);
   }
 
   std::sort(CheckCosts.begin(), CheckCosts.end(), largerCost);
@@ -118,8 +121,11 @@ void SanityCheckCostPass::print(raw_ostream &O, const Module *M) const {
   }
 }
 
-sanitychecks::GCOVFile *SanityCheckCostPass::createGCOVFile() {
-  sanitychecks::GCOVFile *GF = new sanitychecks::GCOVFile;
+std::unique_ptr<sanitychecks::GCOVFile> SanityCheckCostPass::createGCOVFile() {
+  std::unique_ptr<sanitychecks::GCOVFile> GF(new sanitychecks::GCOVFile);
+  if (!GF) {
+    report_fatal_error("Out of memory when allocating a GCOVFile");
+  }
 
   if (InputGCNO.empty()) {
     report_fatal_error("Need to specify --gcno!");

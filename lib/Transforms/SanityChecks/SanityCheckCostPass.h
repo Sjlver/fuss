@@ -1,26 +1,26 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
+#include "GCOV.h"
+
 #include "llvm/Pass.h"
 
 #include <utility>
 #include <vector>
-
-namespace sanitychecks {
-class GCOVFile;
-}
 
 namespace llvm {
 class Instruction;
 class raw_ostream;
 }
 
-struct SanityCheckCostPass : public llvm::ModulePass {
+struct SanityCheckCostPass : public llvm::FunctionPass {
   static char ID;
 
-  SanityCheckCostPass() : ModulePass(ID) {}
+  SanityCheckCostPass() : FunctionPass(ID) {}
 
-  virtual bool runOnModule(llvm::Module &M);
+  virtual bool doInitialization(llvm::Module &M);
+
+  virtual bool runOnFunction(llvm::Function &F);
 
   virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
 
@@ -32,7 +32,12 @@ struct SanityCheckCostPass : public llvm::ModulePass {
   const std::vector<CheckCost> &getCheckCosts() const { return CheckCosts; };
 
 private:
+  // The GCOVFile for the module being compiled. This is shared accross calls
+  // to runOnFunction. Since it's read-only, I hope this is OK.
+  std::unique_ptr<sanitychecks::GCOVFile> GF;
+
+  // Checks in the current function, with their cost.
   std::vector<CheckCost> CheckCosts;
 
-  sanitychecks::GCOVFile *createGCOVFile();
+  std::unique_ptr<sanitychecks::GCOVFile> createGCOVFile();
 };
