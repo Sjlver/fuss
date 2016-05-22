@@ -9,6 +9,7 @@ add_llvm_loadable_module(SanityChecks
   OverheadEstimationPass.cpp
   SanityCheckCostPass.cpp
   SanityCheckInstructionsPass.cpp
+  SanityCheckSampledCostPass.cpp
   utils.cpp
 )
 
