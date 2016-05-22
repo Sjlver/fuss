@@ -2,6 +2,7 @@
 // Please see LICENSE.txt for copyright and licensing information.
 
 #include "utils.h"
+
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/Pass.h"

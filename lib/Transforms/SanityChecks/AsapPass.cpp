@@ -1,10 +1,10 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
-#include "AsapPass.h"
-#include "SanityCheckCostPass.h"
-#include "SanityCheckInstructionsPass.h"
-#include "utils.h"
+#include "llvm/Transforms/SanityChecks/AsapPass.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckSampledCostPass.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckInstructionsPass.h"
+#include "llvm/Transforms/SanityChecks/utils.h"
 
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
@@ -30,7 +30,7 @@ static cl::opt<bool>
                        cl::init(false));
 
 bool AsapPass::runOnFunction(Function &F) {
-  SCC = &getAnalysis<SanityCheckCostPass>();
+  SCC = &getAnalysis<SanityCheckSampledCostPass>();
   SCI = &getAnalysis<SanityCheckInstructionsPass>();
 
   // Check whether we got the right amount of parameters
@@ -49,7 +49,7 @@ bool AsapPass::runOnFunction(Function &F) {
   }
 
   uint64_t TotalCost = 0;
-  for (const SanityCheckCostPass::CheckCost &I : SCC->getCheckCosts()) {
+  for (const SanityCheckSampledCostPass::CheckCost &I : SCC->getCheckCosts()) {
     TotalCost += I.second;
   }
 
@@ -57,7 +57,7 @@ bool AsapPass::runOnFunction(Function &F) {
   // simply remove the first few.
   uint64_t RemovedCost = 0;
   size_t NChecksRemoved = 0;
-  for (const SanityCheckCostPass::CheckCost &I : SCC->getCheckCosts()) {
+  for (const SanityCheckSampledCostPass::CheckCost &I : SCC->getCheckCosts()) {
     if (I.second < CostThreshold) {
       break;
     }
@@ -86,7 +86,7 @@ bool AsapPass::runOnFunction(Function &F) {
 }
 
 void AsapPass::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<SanityCheckCostPass>();
+  AU.addRequired<SanityCheckSampledCostPass>();
   AU.addRequired<SanityCheckInstructionsPass>();
 }
 
@@ -125,6 +125,10 @@ bool AsapPass::optimizeCheckAway(llvm::Instruction *Inst) {
   assert(Inst->use_empty() && "Sanity check is being used?");
   Inst->eraseFromParent();
   return true;
+}
+
+FunctionPass *createAsapPass() {
+  return new AsapPass();
 }
 
 char AsapPass::ID = 0;

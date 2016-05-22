@@ -3,8 +3,8 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
-#include "utils.h"
-#include "SanityCheckInstructionsPass.h"
+#include "llvm/Transforms/SanityChecks/utils.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckInstructionsPass.h"
 
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Function.h"

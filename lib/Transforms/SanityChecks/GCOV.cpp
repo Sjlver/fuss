@@ -14,7 +14,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "GCOV.h"
+#include "llvm/Transforms/SanityChecks/GCOV.h"
+
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Function.h"
@@ -25,6 +26,7 @@
 #include "llvm/Support/MemoryObject.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
+
 #include <algorithm>
 #include <system_error>
 

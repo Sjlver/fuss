@@ -1,9 +1,7 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
-#include "SanityCheckInstructionsPass.h"
-
-#include <algorithm>
+#include "llvm/Transforms/SanityChecks/SanityCheckInstructionsPass.h"
 
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Statistic.h"
@@ -14,6 +12,9 @@
 #include "llvm/IR/CFG.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/IR/Module.h"
+
+#include <algorithm>
+
 #define DEBUG_TYPE "sanity-check-instructions"
 
 using namespace llvm;

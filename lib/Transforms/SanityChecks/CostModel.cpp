@@ -20,7 +20,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CostModel.h"
+#include "llvm/Transforms/SanityChecks/CostModel.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Analysis/Passes.h"

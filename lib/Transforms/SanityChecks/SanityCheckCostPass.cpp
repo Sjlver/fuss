@@ -1,10 +1,10 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
-#include "SanityCheckCostPass.h"
-#include "SanityCheckInstructionsPass.h"
-#include "CostModel.h"
-#include "utils.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckCostPass.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckInstructionsPass.h"
+#include "llvm/Transforms/SanityChecks/CostModel.h"
+#include "llvm/Transforms/SanityChecks/utils.h"
 
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/Constants.h"

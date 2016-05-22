@@ -1,7 +1,7 @@
 # This file is part of ASAP.
 # Please see LICENSE.txt for copyright and licensing information.
 
-add_llvm_loadable_module(SanityChecks
+add_llvm_library(LLVMSanityChecks
   AsapPass.cpp
   CostModel.cpp
   ExitInsteadOfAbortPass.cpp
@@ -11,9 +11,12 @@ add_llvm_loadable_module(SanityChecks
   SanityCheckInstructionsPass.cpp
   SanityCheckSampledCostPass.cpp
   utils.cpp
-)
 
-add_dependencies(SanityChecks LLVMInstrumentation)
+  ADDITIONAL_HEADER_DIRS
+  ${LLVM_MAIN_INCLUDE_DIR}/llvm/Transforms/SanityChecks
+  )
+
+add_dependencies(LLVMSanityChecks LLVMInstrumentation)
 
 # Create symlinks for asap-clang.rb
 add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/bin/asap-clang

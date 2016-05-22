@@ -7,7 +7,7 @@ namespace llvm {
 class Instruction;
 }
 
-struct SanityCheckCostPass;
+struct SanityCheckSampledCostPass;
 struct SanityCheckInstructionsPass;
 
 struct AsapPass : public llvm::FunctionPass {
@@ -20,9 +20,11 @@ struct AsapPass : public llvm::FunctionPass {
   virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
 
 private:
-  SanityCheckCostPass *SCC;
+  SanityCheckSampledCostPass *SCC;
   SanityCheckInstructionsPass *SCI;
 
   // Tries to remove a sanity check; returns true if it worked.
   bool optimizeCheckAway(llvm::Instruction *Inst);
 };
+
+llvm::FunctionPass *createAsapPass();
