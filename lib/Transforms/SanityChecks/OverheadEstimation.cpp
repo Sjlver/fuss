@@ -1,8 +1,8 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
-#include "llvm/Transforms/SanityChecks/OverheadEstimationPass.h"
-#include "llvm/Transforms/SanityChecks/SanityCheckInstructionsPass.h"
+#include "llvm/Transforms/SanityChecks/OverheadEstimation.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckInstructions.h"
 #include "llvm/Transforms/SanityChecks/utils.h"
 
 #include "llvm/IR/BasicBlock.h"
@@ -15,7 +15,7 @@
 
 using namespace llvm;
 
-bool OverheadEstimationPass::runOnModule(Module &M) {
+bool OverheadEstimation::runOnModule(Module &M) {
 
   Type *ty = Type::getInt64Ty(M.getContext());
   GlobalVariable *sanity_counter = new GlobalVariable(M,
@@ -25,7 +25,7 @@ bool OverheadEstimationPass::runOnModule(Module &M) {
   for (auto &func : M) {
     if (func.isDeclaration()) continue;
 
-    SCI = &getAnalysis<SanityCheckInstructionsPass>(func);
+    SCI = &getAnalysis<SanityCheckInstructions>(func);
     for (auto sc : SCI->getSanityCheckRoots()) {
       auto &instrs = SCI->getInstructionsBySanityCheck(sc);
       Instruction *begin = nullptr;
@@ -50,10 +50,15 @@ bool OverheadEstimationPass::runOnModule(Module &M) {
   return false;
 }
 
-void OverheadEstimationPass::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<SanityCheckInstructionsPass>();
+void OverheadEstimation::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.addRequired<SanityCheckInstructions>();
 }
 
-char OverheadEstimationPass::ID = 0;
-static RegisterPass<OverheadEstimationPass> X("overhead-estimation",
-    "Computes the number of checks reached at runtime", false, false);
+char OverheadEstimation::ID = 0;
+INITIALIZE_PASS_BEGIN(OverheadEstimation, "overhead-estimation",
+                      "Computes runtime overhead due to sanity checks",
+                      false, false)
+INITIALIZE_PASS_DEPENDENCY(SanityCheckInstructions)
+INITIALIZE_PASS_END(OverheadEstimation, "overhead-estimation",
+                    "Computes runtime overhead due to sanity checks",
+                    false, false)

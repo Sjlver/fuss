@@ -1,8 +1,8 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
-#include "llvm/Transforms/SanityChecks/SanityCheckSampledCostPass.h"
-#include "llvm/Transforms/SanityChecks/SanityCheckInstructionsPass.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckSampledCost.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckInstructions.h"
 #include "llvm/Transforms/SanityChecks/CostModel.h"
 #include "llvm/Transforms/SanityChecks/utils.h"
 
@@ -25,21 +25,21 @@
 using namespace llvm;
 
 namespace {
-bool largerCost(const SanityCheckSampledCostPass::CheckCost &a,
-                const SanityCheckSampledCostPass::CheckCost &b) {
+bool largerCost(const SanityCheckSampledCost::CheckCost &a,
+                const SanityCheckSampledCost::CheckCost &b) {
   return a.second > b.second;
 }
 } // anonymous namespace
 
-bool SanityCheckSampledCostPass::runOnFunction(Function &F) {
-  DEBUG(dbgs() << "SanityCheckSampledCostPass on " << F.getName() << "\n");
+bool SanityCheckSampledCost::runOnFunction(Function &F) {
+  DEBUG(dbgs() << "SanityCheckSampledCost on " << F.getName() << "\n");
   CheckCosts.clear();
 
   TargetTransformInfoWrapperPass &TTIWP =
       getAnalysis<TargetTransformInfoWrapperPass>();
 
   const TargetTransformInfo &TTI = TTIWP.getTTI(F);
-  SanityCheckInstructionsPass &SCI = getAnalysis<SanityCheckInstructionsPass>();
+  SanityCheckInstructions &SCI = getAnalysis<SanityCheckInstructions>();
   BlockFrequencyInfo &BFI = getAnalysis<BlockFrequencyInfo>();
 
   for (Instruction *Inst : SCI.getSanityCheckRoots()) {
@@ -96,14 +96,14 @@ bool SanityCheckSampledCostPass::runOnFunction(Function &F) {
   return false;
 }
 
-void SanityCheckSampledCostPass::getAnalysisUsage(AnalysisUsage &AU) const {
+void SanityCheckSampledCost::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<BlockFrequencyInfo>();
   AU.addRequired<TargetTransformInfoWrapperPass>();
-  AU.addRequired<SanityCheckInstructionsPass>();
+  AU.addRequired<SanityCheckInstructions>();
   AU.setPreservesAll();
 }
 
-void SanityCheckSampledCostPass::print(raw_ostream &O, const Module *M) const {
+void SanityCheckSampledCost::print(raw_ostream &O, const Module *M) const {
   O << "                Cost Location\n";
   for (const CheckCost &I : CheckCosts) {
     O << format("%20llu ", I.second);
@@ -113,7 +113,7 @@ void SanityCheckSampledCostPass::print(raw_ostream &O, const Module *M) const {
   }
 }
 
-double SanityCheckSampledCostPass::getExecutionCount(const Instruction *I, const BlockFrequencyInfo &BFI) const {
+double SanityCheckSampledCost::getExecutionCount(const Instruction *I, const BlockFrequencyInfo &BFI) const {
   const BasicBlock *BB = I->getParent();
   BlockFrequency Freq = BFI.getBlockFreq(BB);
   uint64_t EntryFreq = BFI.getEntryFreq();
@@ -130,6 +130,10 @@ double SanityCheckSampledCostPass::getExecutionCount(const Instruction *I, const
   return AdjustedCount * scale;
 }
 
-char SanityCheckSampledCostPass::ID = 0;
-static RegisterPass<SanityCheckSampledCostPass>
-    X("sanity-check-sampled-cost", "Finds costs of sanity checks", false, false);
+char SanityCheckSampledCost::ID = 0;
+INITIALIZE_PASS_BEGIN(SanityCheckSampledCost, "sanity-check-sampled-cost",
+                      "Finds costs of sanity checks", false, false)
+INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(SanityCheckInstructions)
+INITIALIZE_PASS_END(SanityCheckSampledCost, "sanity-check-sampled-cost",
+                    "Finds costs of sanity checks", false, false)

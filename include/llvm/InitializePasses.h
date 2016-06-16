@@ -43,6 +43,9 @@ void initializeIPO(PassRegistry&);
 /// Initialize all passes linked into the Instrumentation library.
 void initializeInstrumentation(PassRegistry&);
 
+/// Initialize all passes linked into the SanityChecks library.
+void initializeSanityChecks(PassRegistry&);
+
 /// Initialize all passes linked into the Analysis library.
 void initializeAnalysis(PassRegistry&);
 
@@ -68,6 +71,7 @@ void initializeAliasSetPrinterPass(PassRegistry&);
 void initializeAlignmentFromAssumptionsPass(PassRegistry&);
 void initializeAlwaysInlinerLegacyPassPass(PassRegistry&);
 void initializeArgPromotionPass(PassRegistry&);
+void initializeAsapPassPass(PassRegistry&);
 void initializeAtomicExpandPass(PassRegistry&);
 void initializeBBVectorizePass(PassRegistry&);
 void initializeBDCELegacyPassPass(PassRegistry &);
@@ -127,6 +131,7 @@ void initializeEfficiencySanitizerPass(PassRegistry&);
 void initializeEliminateAvailableExternallyLegacyPassPass(PassRegistry &);
 void initializeRAGreedyPass(PassRegistry&);
 void initializeGVNHoistLegacyPassPass(PassRegistry &);
+void initializeExitInsteadOfAbortPass(PassRegistry&);
 void initializeExpandISelPseudosPass(PassRegistry&);
 void initializeExpandPostRAPass(PassRegistry&);
 void initializeExternalAAWrapperPassPass(PassRegistry&);
@@ -259,6 +264,7 @@ void initializeObjCARCExpandPass(PassRegistry&);
 void initializeObjCARCOptPass(PassRegistry&);
 void initializeOptimizationRemarkEmitterWrapperPassPass(PassRegistry&);
 void initializeOptimizePHIsPass(PassRegistry&);
+void initializeOverheadEstimationPass(PassRegistry&);
 void initializePAEvalPass(PassRegistry &);
 void initializePEIPass(PassRegistry&);
 void initializePGOIndirectCallPromotionLegacyPassPass(PassRegistry&);
@@ -311,6 +317,9 @@ void initializeSROALegacyPassPass(PassRegistry&);
 void initializeSafeStackPass(PassRegistry&);
 void initializeSampleProfileLoaderLegacyPassPass(PassRegistry&);
 void initializeSanitizerCoverageModulePass(PassRegistry&);
+void initializeSanityCheckCostPass(PassRegistry&);
+void initializeSanityCheckInstructionsPass(PassRegistry&);
+void initializeSanityCheckSampledCostPass(PassRegistry&);
 void initializeScalarEvolutionWrapperPassPass(PassRegistry&);
 void initializeScalarizerPass(PassRegistry&);
 void initializeScopedNoAliasAAWrapperPassPass(PassRegistry&);

@@ -24,11 +24,13 @@ class Value;
 
 // TODO: Const-correctness. Shouldn't an InstructionSet contain const instrs?
 
-struct SanityCheckInstructionsPass : public llvm::FunctionPass {
+struct SanityCheckInstructions : public llvm::FunctionPass {
   static char ID;
 
-  SanityCheckInstructionsPass() : FunctionPass(ID) {}
-  virtual ~SanityCheckInstructionsPass() {}
+  SanityCheckInstructions() : FunctionPass(ID) {
+    initializeSanityCheckInstructionsPass(*llvm::PassRegistry::getPassRegistry());
+  }
+  virtual ~SanityCheckInstructions() {}
 
   virtual bool runOnFunction(llvm::Function &F);
 
@@ -38,7 +40,7 @@ struct SanityCheckInstructionsPass : public llvm::FunctionPass {
   }
 
   const InstructionSet &getSanityCheckRoots() const {
-    return SanityCheckRoots;
+    return SCRoots;
   }
 
   const InstructionSet &
@@ -48,11 +50,11 @@ struct SanityCheckInstructionsPass : public llvm::FunctionPass {
 
 private:
   // All instructions that belong to sanity checks
-  InstructionSet SanityCheckInstructions;
+  InstructionSet SCInstructions;
 
   // All sanity check roots. These are the instructions at the source of a
   // sanity check. For example, a call to __asan_report_read4.
-  InstructionSet SanityCheckRoots;
+  InstructionSet SCRoots;
 
   // A map of all instructions on which a given sanity check root
   // instruction depends.

@@ -1,7 +1,7 @@
 // Tests whether ASAP can recognize sanity check instructions correctly.
 
 // RUN: clang -Wall -c %s -flto -fsanitize=address -O1 -o %t.o
-// RUN: opt -load $(llvm-config --libdir)/SanityChecks.* -sanity-check-instructions %t.o -o %t.sanitychecks.ll -S
+// RUN: opt -sanity-check-instructions %t.o -o %t.sanitychecks.ll -S
 // RUN: FileCheck %s < %t.sanitychecks.ll
 
 int foo(int *a) {

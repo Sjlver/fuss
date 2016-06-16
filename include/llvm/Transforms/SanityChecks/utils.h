@@ -20,8 +20,6 @@ class raw_ostream;
 typedef llvm::SmallPtrSet<llvm::BasicBlock *, 32> BlockSet;
 typedef llvm::SmallPtrSet<llvm::Instruction *, 32> InstructionSet;
 
-struct SanityCheckInstructionsPass;
-
 // Returns true if a given instruction is an instrumentation instruction. This
 // includes assertions, sanity checks, thread sanitizer memory access logging,
 // etc.

@@ -1,8 +1,8 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
-#include "llvm/Transforms/SanityChecks/SanityCheckCostPass.h"
-#include "llvm/Transforms/SanityChecks/SanityCheckInstructionsPass.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckCost.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckInstructions.h"
 #include "llvm/Transforms/SanityChecks/CostModel.h"
 #include "llvm/Transforms/SanityChecks/utils.h"
 
@@ -30,26 +30,26 @@ static cl::opt<std::string> InputGCDA("gcda", cl::desc("<input gcda file>"),
                                       cl::init(""), cl::Hidden);
 
 namespace {
-bool largerCost(const SanityCheckCostPass::CheckCost &a,
-                const SanityCheckCostPass::CheckCost &b) {
+bool largerCost(const SanityCheckCost::CheckCost &a,
+                const SanityCheckCost::CheckCost &b) {
   return a.second > b.second;
 }
 } // anonymous namespace
 
-bool SanityCheckCostPass::doInitialization(Module &M) {
+bool SanityCheckCost::doInitialization(Module &M) {
   GF = createGCOVFile();
   return false;
 }
 
-bool SanityCheckCostPass::runOnFunction(Function &F) {
-  DEBUG(dbgs() << "SanityCheckCostPass on " << F.getName() << "\n");
+bool SanityCheckCost::runOnFunction(Function &F) {
+  DEBUG(dbgs() << "SanityCheckCost on " << F.getName() << "\n");
   CheckCosts.clear();
 
   TargetTransformInfoWrapperPass &TTIWP =
       getAnalysis<TargetTransformInfoWrapperPass>();
 
   const TargetTransformInfo &TTI = TTIWP.getTTI(F);
-  SanityCheckInstructionsPass &SCI = getAnalysis<SanityCheckInstructionsPass>();
+  SanityCheckInstructions &SCI = getAnalysis<SanityCheckInstructions>();
 
   for (Instruction *Inst : SCI.getSanityCheckRoots()) {
     assert(Inst->getParent()->getParent() == &F &&
@@ -105,13 +105,13 @@ bool SanityCheckCostPass::runOnFunction(Function &F) {
   return false;
 }
 
-void SanityCheckCostPass::getAnalysisUsage(AnalysisUsage &AU) const {
+void SanityCheckCost::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<TargetTransformInfoWrapperPass>();
-  AU.addRequired<SanityCheckInstructionsPass>();
+  AU.addRequired<SanityCheckInstructions>();
   AU.setPreservesAll();
 }
 
-void SanityCheckCostPass::print(raw_ostream &O, const Module *M) const {
+void SanityCheckCost::print(raw_ostream &O, const Module *M) const {
   O << "                Cost Location\n";
   for (const CheckCost &I : CheckCosts) {
     O << format("%20llu ", I.second);
@@ -121,7 +121,7 @@ void SanityCheckCostPass::print(raw_ostream &O, const Module *M) const {
   }
 }
 
-std::unique_ptr<sanitychecks::GCOVFile> SanityCheckCostPass::createGCOVFile() {
+std::unique_ptr<sanitychecks::GCOVFile> SanityCheckCost::createGCOVFile() {
   std::unique_ptr<sanitychecks::GCOVFile> GF(new sanitychecks::GCOVFile);
   if (!GF) {
     report_fatal_error("Out of memory when allocating a GCOVFile");
@@ -156,6 +156,10 @@ std::unique_ptr<sanitychecks::GCOVFile> SanityCheckCostPass::createGCOVFile() {
   return GF;
 }
 
-char SanityCheckCostPass::ID = 0;
-static RegisterPass<SanityCheckCostPass>
-    X("sanity-check-cost", "Finds costs of sanity checks", false, false);
+char SanityCheckCost::ID = 0;
+INITIALIZE_PASS_BEGIN(SanityCheckCost, "sanity-check-cost",
+                      "Finds costs of sanity checks", false, false)
+INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(SanityCheckInstructions)
+INITIALIZE_PASS_END(SanityCheckCost, "sanity-check-cost",
+                    "Finds costs of sanity checks", false, false)

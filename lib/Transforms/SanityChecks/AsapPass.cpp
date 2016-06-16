@@ -2,8 +2,8 @@
 // Please see LICENSE.txt for copyright and licensing information.
 
 #include "llvm/Transforms/SanityChecks/AsapPass.h"
-#include "llvm/Transforms/SanityChecks/SanityCheckSampledCostPass.h"
-#include "llvm/Transforms/SanityChecks/SanityCheckInstructionsPass.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckSampledCost.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckInstructions.h"
 #include "llvm/Transforms/SanityChecks/utils.h"
 
 #include "llvm/IR/BasicBlock.h"
@@ -30,8 +30,8 @@ static cl::opt<bool>
                        cl::init(false));
 
 bool AsapPass::runOnFunction(Function &F) {
-  SCC = &getAnalysis<SanityCheckSampledCostPass>();
-  SCI = &getAnalysis<SanityCheckInstructionsPass>();
+  SCC = &getAnalysis<SanityCheckSampledCost>();
+  SCI = &getAnalysis<SanityCheckInstructions>();
 
   // Check whether we got the right amount of parameters
   if (CostThreshold == (unsigned long long)(-1)) {
@@ -49,7 +49,7 @@ bool AsapPass::runOnFunction(Function &F) {
   }
 
   uint64_t TotalCost = 0;
-  for (const SanityCheckSampledCostPass::CheckCost &I : SCC->getCheckCosts()) {
+  for (const SanityCheckSampledCost::CheckCost &I : SCC->getCheckCosts()) {
     TotalCost += I.second;
   }
 
@@ -57,7 +57,7 @@ bool AsapPass::runOnFunction(Function &F) {
   // simply remove the first few.
   uint64_t RemovedCost = 0;
   size_t NChecksRemoved = 0;
-  for (const SanityCheckSampledCostPass::CheckCost &I : SCC->getCheckCosts()) {
+  for (const SanityCheckSampledCost::CheckCost &I : SCC->getCheckCosts()) {
     if (I.second < CostThreshold) {
       break;
     }
@@ -86,8 +86,8 @@ bool AsapPass::runOnFunction(Function &F) {
 }
 
 void AsapPass::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<SanityCheckSampledCostPass>();
-  AU.addRequired<SanityCheckInstructionsPass>();
+  AU.addRequired<SanityCheckSampledCost>();
+  AU.addRequired<SanityCheckInstructions>();
 }
 
 // Tries to remove a sanity check; returns true if it worked.
@@ -132,5 +132,9 @@ FunctionPass *createAsapPass() {
 }
 
 char AsapPass::ID = 0;
-static RegisterPass<AsapPass> X("asap", "Removes too costly sanity checks",
-                                false, false);
+INITIALIZE_PASS_BEGIN(AsapPass, "asap",
+                      "Removes too costly sanity checks", false, false)
+INITIALIZE_PASS_DEPENDENCY(SanityCheckSampledCost)
+INITIALIZE_PASS_DEPENDENCY(SanityCheckInstructions)
+INITIALIZE_PASS_END(AsapPass, "asap",
+                    "Removes too costly sanity checks", false, false)

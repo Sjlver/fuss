@@ -270,7 +270,6 @@ class AsapCustomCompiler < BaseCompiler
     opt_level = get_optlevel_for_llc(cmd)
     pass_params = state.custom_passes.map { |p| "-#{p}" }
     run!(find_opt(),
-         '-load', find_asap_lib(),
          *pass_params, '-o', custom_name, orig_name)
     run!(find_opt(),
          opt_level, '-o', opt_name, custom_name)
@@ -338,7 +337,6 @@ class AsapOptimizingCompiler < BaseCompiler
     opt_level = get_optlevel_for_llc(cmd)
     FileUtils.mkdir_p(File.dirname(log_name))
     run!(find_opt(),
-         '-load', find_asap_lib(),
          '-asap',
          '-print-removed-checks',
          "-asap-cost-threshold=#{@cost_threshold}",
@@ -370,7 +368,6 @@ def compute_costs(state)
     FileUtils.mkdir_p(File.dirname(costs_name))
 
     run!(find_opt(),
-         '-load', find_asap_lib(),
          '-analyze', '-sanity-check-cost',
          "-gcda=#{gcda_name}", "-gcno=#{gcno_name}", orig_name,
          :out => costs_name)

@@ -9,6 +9,7 @@ set(LLVM_LINK_COMPONENTS
   Instrumentation
   Linker
   ObjCARCOpts
+  SanityChecks
   ScalarOpts
   Support
   Target

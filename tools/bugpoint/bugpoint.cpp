@@ -132,6 +132,7 @@ int main(int argc, char **argv) {
   initializeTransformUtils(Registry);
   initializeInstCombine(Registry);
   initializeInstrumentation(Registry);
+  initializeSanityChecks(Registry);
   initializeTarget(Registry);
 
 #ifdef LINK_POLLY_INTO_TOOLS

@@ -29,4 +29,5 @@ required_libraries =
  Instrumentation
  Linker
  ObjCARC
+ SanityChecks
  Scalar

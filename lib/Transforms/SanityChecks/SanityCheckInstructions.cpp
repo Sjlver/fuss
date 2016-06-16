@@ -1,7 +1,7 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
-#include "llvm/Transforms/SanityChecks/SanityCheckInstructionsPass.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckInstructions.h"
 
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Statistic.h"
@@ -21,22 +21,22 @@ using namespace llvm;
 
 STATISTIC(NumSanityChecksDetected, "Number of sanity checks detected");
 
-bool SanityCheckInstructionsPass::runOnFunction(Function &F) {
-  DEBUG(dbgs() << "SanityCheckInstructionsPass on " << F.getName() << "\n");
-  SanityCheckInstructions.clear();
-  SanityCheckRoots.clear();
+bool SanityCheckInstructions::runOnFunction(Function &F) {
+  DEBUG(dbgs() << "SanityCheckInstructions on " << F.getName() << "\n");
+  SCInstructions.clear();
+  SCRoots.clear();
   InstructionsBySanityCheck.clear();
   findInstructions(&F);
 
   MDNode *MD = MDNode::get(F.getContext(), {});
-  for (Instruction *Inst : SanityCheckInstructions) {
+  for (Instruction *Inst : SCInstructions) {
     Inst->setMetadata("sanitycheck", MD);
   }
 
-  return !SanityCheckInstructions.empty();
+  return !SCInstructions.empty();
 }
 
-void SanityCheckInstructionsPass::findInstructions(Function *F) {
+void SanityCheckInstructions::findInstructions(Function *F) {
   if (F->empty()) {
     return;
   }
@@ -64,7 +64,7 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
       if (isInstrumentation(&I)) {
         Worklist.insert(&I);
         ChecksByInstruction[&I].insert(&I);
-        SanityCheckRoots.insert(&I);
+        SCRoots.insert(&I);
         NumSanityChecksDetected += 1;
         InstrumentationInBB = &I;
       }
@@ -91,7 +91,7 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
       Worklist.erase(Inst);
 
       if (onlyUsedInSanityChecks(Inst)) {
-        if (SanityCheckInstructions.insert(Inst).second) {
+        if (SCInstructions.insert(Inst).second) {
           for (Use &U : Inst->operands()) {
             if (Instruction *Op = dyn_cast<Instruction>(U.get())) {
               Worklist.insert(Op);
@@ -127,8 +127,7 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
       BasicBlock *BB = *BlockWorklist.begin();
       BlockWorklist.erase(BB);
 
-      if (onlyDominatesInstructionsFrom(
-              &*BB->begin(), SanityCheckInstructions, DT)) {
+      if (onlyDominatesInstructionsFrom(&*BB->begin(), SCInstructions, DT)) {
         for (User *U : BB->users()) {
           if (Instruction *Inst = dyn_cast<Instruction>(U)) {
             Worklist.insert(Inst);
@@ -145,20 +144,20 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
   }
 }
 
-bool SanityCheckInstructionsPass::onlyUsedInSanityChecks(Value *V) {
+bool SanityCheckInstructions::onlyUsedInSanityChecks(Value *V) {
   for (User *U : V->users()) {
     Instruction *Inst = dyn_cast<Instruction>(U);
     if (!Inst)
       return false;
 
-    if (!(SanityCheckInstructions.count(Inst))) {
+    if (!(SCInstructions.count(Inst))) {
       return false;
     }
   }
   return true;
 }
 
-bool SanityCheckInstructionsPass::onlyDominatesInstructionsFrom(
+bool SanityCheckInstructions::onlyDominatesInstructionsFrom(
     Instruction *I, const InstructionSet &Instrs, const DominatorTree &DT) {
   SmallVector<BasicBlock *, 8> dominatedBBs;
   DT.getDescendants(I->getParent(), dominatedBBs);
@@ -168,7 +167,7 @@ bool SanityCheckInstructionsPass::onlyDominatesInstructionsFrom(
                      });
 }
 
-bool SanityCheckInstructionsPass::onlyContainsInstructionsFrom(
+bool SanityCheckInstructions::onlyContainsInstructionsFrom(
     BasicBlock *BB, const InstructionSet &Instrs) {
   return std::all_of(BB->begin(), BB->end(), [&Instrs](Instruction &I) {
     // TODO: ignore debug intrinsics, etc.?
@@ -176,8 +175,9 @@ bool SanityCheckInstructionsPass::onlyContainsInstructionsFrom(
   });
 }
 
-char SanityCheckInstructionsPass::ID = 0;
-
-static RegisterPass<SanityCheckInstructionsPass>
-    X("sanity-check-instructions",
-      "Finds instructions belonging to sanity checks", false, false);
+char SanityCheckInstructions::ID = 0;
+INITIALIZE_PASS_BEGIN(SanityCheckInstructions, "sanity-check-instructions",
+                      "Finds instructions belonging to sanity checks", false, false)
+INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
+INITIALIZE_PASS_END(SanityCheckInstructions, "sanity-check-instructions",
+                      "Finds instructions belonging to sanity checks", false, false)

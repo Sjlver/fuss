@@ -4,12 +4,13 @@
 add_llvm_library(LLVMSanityChecks
   AsapPass.cpp
   CostModel.cpp
-  ExitInsteadOfAbortPass.cpp
+  ExitInsteadOfAbort.cpp
   GCOV.cpp
-  OverheadEstimationPass.cpp
-  SanityCheckCostPass.cpp
-  SanityCheckInstructionsPass.cpp
-  SanityCheckSampledCostPass.cpp
+  OverheadEstimation.cpp
+  SanityCheckCost.cpp
+  SanityCheckInstructions.cpp
+  SanityChecks.cpp
+  SanityCheckSampledCost.cpp
   utils.cpp
 
   ADDITIONAL_HEADER_DIRS

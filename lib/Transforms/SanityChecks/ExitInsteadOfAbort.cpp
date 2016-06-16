@@ -18,10 +18,12 @@ namespace {
 // This pass can be useful when we depend on atexit() functions to be
 // called. This happens, for instance, when we would like profiling counters
 // to be written out even if the program is aborted.
-struct ExitInsteadOfAbortPass : public FunctionPass {
+struct ExitInsteadOfAbort : public FunctionPass {
   static char ID;
 
-  ExitInsteadOfAbortPass() : FunctionPass(ID) {}
+  ExitInsteadOfAbort() : FunctionPass(ID) {
+    initializeExitInsteadOfAbortPass(*llvm::PassRegistry::getPassRegistry());
+  }
 
   virtual bool runOnFunction(Function &F) {
     // Setup functions and exit values
@@ -55,8 +57,7 @@ struct ExitInsteadOfAbortPass : public FunctionPass {
 
 }
 
-char ExitInsteadOfAbortPass::ID = 0;
-static RegisterPass<ExitInsteadOfAbortPass>
-    X("exit-instead-of-abort",
-      "Transforms calls to abort and similar functions into clean exits", false,
-      false);
+char ExitInsteadOfAbort::ID = 0;
+INITIALIZE_PASS(ExitInsteadOfAbort, "exit-instead-of-abort",
+                "Transforms calls to abort and similar functions into clean exits",
+                false, false)

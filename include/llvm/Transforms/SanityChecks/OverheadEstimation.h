@@ -11,17 +11,17 @@ namespace llvm {
   class Instruction;
 }
 
-struct SanityCheckInstructionsPass;
+struct SanityCheckInstructions;
 
-struct OverheadEstimationPass : public llvm::ModulePass {
+struct OverheadEstimation : public llvm::ModulePass {
   static char ID;
 
-  OverheadEstimationPass() : ModulePass(ID), SCI(nullptr) {}
+  OverheadEstimation() : ModulePass(ID), SCI(nullptr) {}
 
   virtual bool runOnModule(llvm::Module &M);
 
   virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
 
 private:
-  SanityCheckInstructionsPass *SCI;
+  SanityCheckInstructions *SCI;
 };

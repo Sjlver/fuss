@@ -62,11 +62,6 @@ def find_ar()
   which('ar')
 end
 
-def find_asap_lib()
-  ["#{SCRIPT_DIR}/../lib/SanityChecks.dylib",
-   "#{SCRIPT_DIR}/../lib/SanityChecks.so"].find { |f| File.file?(f) }
-end
-
 
 # Transforming file names
 # =======================
