@@ -9,6 +9,14 @@ import threading
 import fnmatch
 
 
+###### Default running params
+corpus='CORPUS'
+sampling_time = 20
+max_len = 2000
+seed = 0
+
+
+##### Commands and configuration parameters
 fuzzer_running=False
 
 fuzzer_src='Fuzzer/'
@@ -17,7 +25,6 @@ libxml_target_fuzzer='libxml_fuzzer.cc'
 
 libxml_exec='libxml'
 libxml_obj='libxml_fuzzer.o'
-corpus='CORPUS'
 llvm_prof_path='perf.llvm_prof'
 exec_fuzzer='ASAN_OPTIONS=detect_odr_violation=0 ' + libxml_exec + \
         corpus + ' -close_fd_mask=2 -max_len=1024 '
@@ -28,14 +35,15 @@ prefix=os.path.join(pwd, 'inst')
 
 cc="/home/alex/asap/build/bin/clang-3.7"
 cov_flags="-fsanitize-coverage=edge,indirect-calls,8bit-counters"
-basic_cflags=['-O2', '-fsanitize=address', cov_flags]
+basic_cflags=['-O2', '-fsanitize=address', cov_flags, '-flto']
 focused_cflags= basic_cflags + ['-fprofile-sample-use=' +
         os.path.join(os.getcwd(), llvm_prof_path), '-B/usr/bin/ld.gold',
-        '-fsanitize=asap', '-mllvm', '-asap-cost-threshold=1000', '-flto']
+        '-fsanitize=asap', '-mllvm', '-asap-cost-threshold=1000']
 focused_ldflags = ['-flto', '-B/usr/bin/ld.gold']
 focused_ranlib = ['llvm-ranlib']
 logfile='focusedfuzzing.log'
 logfile_handler=1
+
 
 
 def file_pattern(root, pattern):
@@ -147,7 +155,8 @@ def start_fuzzer_process():
 
     env_vars = dict(os.environ)
     env_vars['ASAN_OPTIONS'] = 'detect_odr_violation=0'
-    start_fuzzer_command = [exec_path, corpus_path,  '-close_fd_mask=2', '-max_len=5000']
+    start_fuzzer_command = [exec_path, corpus_path,  '-close_fd_mask=2',
+            '-max_len=' + str(max_len), '-seed=' + str(seed), '-print_final_stats=1']
 
     print('[DEBUG] Start libxml fuzzer command:\n\t' + ' '.join(start_fuzzer_command))
     libxml_proc = subprocess.Popen(start_fuzzer_command, env=env_vars, stdout=logfile_handler,
@@ -169,7 +178,7 @@ def main():
         perf_command = ['perf', 'record', '-b', '-p', str(libxml_proc_popen.pid)]
         print('[DEBUG] Start perf sampling command:\n\t' + ' '.join(perf_command))
         perf_proc = subprocess.Popen(perf_command, stdout=logfile_handler)
-        time.sleep(20)
+        time.sleep(sampling_time)
 
         os.kill(perf_proc.pid, signal.SIGINT)
         print('[DEBUG] Killed perf process with pid:[%d]' % (perf_proc.pid))
@@ -218,15 +227,42 @@ class Process():
         print('[DEBUG] The libxml process with pid [%s] exited' % (self.pid))
         self.crash_thread.join()
 
+def get_arg(param):
+    if param.count('=')  != 1:
+        return ''
+    return param.split('=')
+
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == 'clean':
-        try:
-            subprocess.check_call(['rm', '-r', 'CORPUS'] + \
-                file_pattern('.', '*.o') + [libxml_exec, 'libFuzzer.a'])
-        except subprocess.CalledProcessError as e:
-            print(e)
+    usage = sys.argv[0] + ' -command=[clean | run] -corpus=<corpus_name> -sampling-time=<time> -max-len=<max_len> -seed=<seed>'
+    if len(sys.argv) == 6:
+        params = [get_arg(x) for x in sys.argv[1:]]
+
+        for param in params:
+            if param[0] == '-command':
+                command = param[1]
+                if command == 'clean':
+                    try:
+                        subprocess.check_call(['rm', '-r', 'CORPUS'] + \
+                            file_pattern('.', '*.o') + [libxml_exec, 'libFuzzer.a'])
+                    except subprocess.CalledProcessError as e:
+                        print(e)
+                    exit()
+            if param[0] == '-corpus':
+                corpus = param[1]
+            if param[0] == '-sampling-time':
+                sampling_time = int(param[1])
+            if param[0] == '-max-len':
+                max_len = int(param[1])
+            if param[0] == '-seed':
+                seed = int(param[1])
     else:
-        logfile_handler = open(logfile, 'a')
-        main()
+        print(usage)
+        exit()
+
+    print(('[INFO] Running focused fuzzer with the following parameters:\n\t' +
+            'corpus path:[%s] ' + 'sampling_time:[%d] ' + 'max_len:[%d] ' +
+            'seed:[%d]') % (corpus, sampling_time, max_len, seed))
+    logfile_handler = open(logfile, 'a')
+    main()
 
