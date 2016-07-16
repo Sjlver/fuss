@@ -119,25 +119,59 @@ void SanityCheckInstructions::findInstructions(Function *F) {
       }
     }
 
-    // ... and checking whether this causes basic blocks to dominate only
-    // sanity check instructions. This would imply that branches to these
-    // blocks could be eliminated, and would cause the corresponding
-    // terminators to be added to the worklist.
+    // ... and checking whether this causes branches to lead to purely sanity
+    // check code. Consider the following example:
+    //
+    // Pred
+    // |  \
+    // |  BB*
+    // |  |  \
+    // |  | B1*
+    // |  |  /
+    // |  B2*
+    // | /
+    // B3
+    //
+    // Blocks containing only sanity checks are marked with "*". One branch of
+    // Pred contains only sanity check blocks, making Pred unnecessary.
+    //
+    // We detect this pattern by starting at BB. We check whether BB dominates
+    // only sanity check instructions. If yes, we examine whether BB's
+    // dominance frontier consists of a single node (B3 in this case) that has
+    // the same predecessor as BB.
     while (!BlockWorklist.empty()) {
       BasicBlock *BB = *BlockWorklist.begin();
       BlockWorklist.erase(BB);
 
-      if (onlyDominatesInstructionsFrom(&*BB->begin(), SCInstructions, DT)) {
-        for (User *U : BB->users()) {
-          if (Instruction *Inst = dyn_cast<Instruction>(U)) {
-            Worklist.insert(Inst);
-            // Attribute Inst to the same check as the first instruction in BB.
-            auto CBI = ChecksByInstruction.find(&*BB->begin());
-            if (CBI != ChecksByInstruction.end()) {
-              ChecksByInstruction[Inst].insert(CBI->second.begin(),
-                                               CBI->second.end());
-            }
-          }
+      BasicBlock *Pred = BB->getUniquePredecessor();
+      if (!Pred) { continue; }
+      Instruction *PredTerminator = Pred->getTerminator();
+
+      if (!onlyDominatesInstructionsFrom(&*BB->begin(), SCInstructions, DT)) { continue; }
+
+      if (auto BI = dyn_cast<BranchInst>(PredTerminator)) {
+        if (BI->isConditional()) {
+          SmallPtrSet<BasicBlock *, 8> FrontierBBs;
+          getDominanceFrontier(BB, DT, FrontierBBs);
+          if (FrontierBBs.size() > 1) continue;
+
+          if (FrontierBBs.size() == 1 &&
+              std::find(succ_begin(Pred), succ_end(Pred), *FrontierBBs.begin())
+              == succ_end(Pred)) { continue; }
+        }
+
+        // At this point, PredTerminator is either an unconditional branch to a
+        // sanity check block, or a condition branch that matches the pattern
+        // described above.
+        Worklist.insert(PredTerminator);
+        dbgs() << "Adding Pred to Worklist: "; Pred->dump();
+        dbgs() << "... because it goes to this block: "; BB->dump();
+
+        // Attribute PredTerminator to the same check as the first instruction in BB.
+        auto CBI = ChecksByInstruction.find(&*BB->begin());
+        if (CBI != ChecksByInstruction.end()) {
+          ChecksByInstruction[PredTerminator].insert(CBI->second.begin(),
+                                                     CBI->second.end());
         }
       }
     }
@@ -173,6 +207,21 @@ bool SanityCheckInstructions::onlyContainsInstructionsFrom(
     // TODO: ignore debug intrinsics, etc.?
     return Instrs.count(&I) > 0;
   });
+}
+
+void SanityCheckInstructions::getDominanceFrontier(
+    BasicBlock *BB, const DominatorTree &DT, SmallPtrSet<BasicBlock *, 8> &Result) {
+  Result.clear();
+  SmallVector<BasicBlock *, 8> dominatedBBs;
+  DT.getDescendants(BB, dominatedBBs);
+  SmallPtrSet<BasicBlock *, 8> dominatedBBSet(dominatedBBs.begin(), dominatedBBs.end());
+  for (BasicBlock *D : dominatedBBs) {
+    for (BasicBlock *DSucc : successors(D)) {
+      if (!dominatedBBSet.count(DSucc)) {
+        Result.insert(DSucc);
+      }
+    }
+  }
 }
 
 char SanityCheckInstructions::ID = 0;

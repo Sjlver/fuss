@@ -78,4 +78,8 @@ private:
   // given set, and no other instructions.
   bool onlyContainsInstructionsFrom(llvm::BasicBlock *BB,
                                     const InstructionSet &Instrs);
+
+  // Obtains the dominance frontier for a given basic block.
+  void getDominanceFrontier(llvm::BasicBlock *BB, const llvm::DominatorTree &DT,
+                            llvm::SmallPtrSet<llvm::BasicBlock *, 8> &Result);
 };
