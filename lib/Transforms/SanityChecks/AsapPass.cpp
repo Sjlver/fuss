@@ -121,6 +121,13 @@ bool AsapPass::optimizeCheckAway(llvm::Instruction *Inst) {
       assert(I->use_empty() && "AsmForSideEffect is being used?");
       I->eraseFromParent();
     }
+
+    // We also remove atomic qualifiers from loads. Such qualifiers are used
+    // by SanitizerCoverage. They should be save to remove, since the load is
+    // only used by sanity checks.
+    if (auto L = dyn_cast<LoadInst>(I)) {
+      L->setAtomic(AtomicOrdering::NotAtomic);
+    }
   }
   assert(Inst->use_empty() && "Sanity check is being used?");
   Inst->eraseFromParent();

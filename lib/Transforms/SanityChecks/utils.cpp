@@ -11,7 +11,9 @@
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
@@ -30,6 +32,11 @@ static cl::opt<bool> OptimizeThreadSanitizer(
     cl::desc("Should ASAP affect TSan runtime library functions?"),
     cl::init(true));
 
+static cl::opt<bool> OptimizeSanitizerCoverage(
+    "asap-optimize-sancov",
+    cl::desc("Should ASAP affect SanitizerCoverage?"),
+    cl::init(true));
+
 namespace {
   // Returns the next instruction after inst that is not a debug info
   // intrinsic.
@@ -38,6 +45,29 @@ namespace {
       inst = inst->getNextNode();
     }
     return inst;
+  }
+
+  // Determines whether `C` is based on `Base`. This returns true if C equals
+  // Base, or if any of C's operands is based on Base.
+  bool isConstantBasedOn(const Constant *C, const Constant *Base) {
+    SmallPtrSet<const Constant *, 8> Visited;
+    SmallPtrSet<const Constant *, 8> Worklist;
+    Worklist.insert(C);
+    while (!Worklist.empty()) {
+      const Constant *Cur = *Worklist.begin();
+      Worklist.erase(Cur);
+      if (Visited.count(Cur)) {
+        continue;
+      }
+      Visited.insert(Cur);
+      if (Cur == Base) {
+        return true;
+      }
+      for (const Use &U : Cur->operands()) {
+        Worklist.insert(cast<const Constant>(U.get()));
+      }
+    }
+    return false;
   }
 }  // anonymous namespace
 
@@ -62,6 +92,22 @@ bool isInstrumentation(const Instruction *I) {
           name.startswith("__tsan_write") ||
           name.startswith("__tsan_unaligned_write")) {
         return OptimizeThreadSanitizer;
+      }
+      if (name == "__sanitizer_cov" ||
+          name == "__sanitizer_cov_with_check" ||
+          name == "__sanitizer_cov_indir_call16") {
+        return OptimizeSanitizerCoverage;
+      }
+    }
+  } else if (auto *SI = dyn_cast<const StoreInst>(I)) {
+    // For stores, check whether they store to an element of the sancov counter
+    // array. We check whether the pointer operand is a constant, and then
+    // examine its entire expression tree.
+    if (auto *Op = dyn_cast<const Constant>(SI->getPointerOperand())) {
+      const Module *M = I->getModule();
+      const GlobalVariable *SanCovCounters = M->getGlobalVariable("__sancov_gen_cov_counter", true);
+      if (SanCovCounters && isConstantBasedOn(Op, SanCovCounters)) {
+        return OptimizeSanitizerCoverage;
       }
     }
   }
