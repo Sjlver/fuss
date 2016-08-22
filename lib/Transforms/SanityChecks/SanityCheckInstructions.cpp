@@ -164,8 +164,6 @@ void SanityCheckInstructions::findInstructions(Function *F) {
         // sanity check block, or a condition branch that matches the pattern
         // described above.
         Worklist.insert(PredTerminator);
-        dbgs() << "Adding Pred to Worklist: "; Pred->dump();
-        dbgs() << "... because it goes to this block: "; BB->dump();
 
         // Attribute PredTerminator to the same check as the first instruction in BB.
         auto CBI = ChecksByInstruction.find(&*BB->begin());
