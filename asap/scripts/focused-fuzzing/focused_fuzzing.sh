@@ -9,6 +9,9 @@ if [ "$1" = "clean" ]; then
   exit 0
 fi
 
+mkdir -p logs
+mkdir -p perf-data
+
 # Experiments with fuzzing libxml. On luke1 (DSLab's development machine, 48
 # cores), calling `rm -rf *-build; time ./focused_fuzzing.sh` takes about 1.5
 # minutes. I think it might make sense to experiment a bit more, and ensure we
@@ -22,7 +25,7 @@ fi
 
 # "the default"
 # 300000 runs in 14 or 15 second(s)
-ASAN_CFLAGS="-O2 -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters"
+ASAN_CFLAGS="-O2 -g -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters"
 
 # No addresssanitizer checks
 # 300000 runs in 13 second(s)
@@ -78,7 +81,7 @@ build_libxml_and_fuzzer() {
       --without-reader --without-readline --without-regexps --without-sax1 --without-schemas \
       --without-schematron --without-threads --without-valid --without-writer --without-xinclude \
       --without-xpath --without-xptr --without-zlib --without-lzma
-    make -j $N_CORES V=1
+    make -j $N_CORES V=1 2>&1 | tee "../logs/libxml2-$name-build.log"
     make install
     cd ..
   fi
@@ -97,9 +100,28 @@ test_fuzzer() {
   local name="$1"
 
   if ! [ -f "logs/libxmlfuzzer-${name}.log" ]; then
-    mkdir -p logs
     "./libxmlfuzzer-$name-build/libxml_fuzzer" -seed=1 -verbosity=2 -runs=300000 2>&1 \
       | tee "logs/libxmlfuzzer-${name}.log"
+  fi
+}
+
+# Run the fuzzer named `name` under perf, and create an llvm_prof file.
+profile_fuzzer() {
+  local name="$1"
+  local perf_args="$2"
+
+  # For the moment, we're using the same 300k executions that we use for benchmarking.
+  if ! [ -f "perf-data/perf-${name}.data" ]; then
+    perf record "$perf_args" -o "perf-data/perf-${name}.data" \
+      "./libxmlfuzzer-$name-build/libxml_fuzzer" -seed=1 -verbosity=2 -runs=300000 2>&1 \
+      | tee "logs/libxmlfuzzer-$name-perf.log"
+  fi
+
+  # Convert perf data to LLVM profiling input.
+  if ! [ -f "perf-data/perf-${name}.llvm_prof" ] && echo " $perf_args " | grep -q -- ' -b '; then
+    create_llvm_prof --binary="libxmlfuzzer-$name-build/libxml_fuzzer" \
+      --profile="perf-data/perf-${name}.data" \
+      --out="perf-data/perf-${name}.llvm_prof"
   fi
 }
 
@@ -109,24 +131,15 @@ build_libxml_and_fuzzer "asan" ""
 # Test the fuzzer. Should take no more than ~20 seconds for 300000 executions.
 test_fuzzer "asan"
 
-# Run the fuzzer under perf. For the moment, we're using the same 300k executions.
-if ! [ -f perf-data/perf-asan.data ]; then
-  mkdir -p perf-data
-  perf record -b -o perf-data/perf-asan.data ./libxmlfuzzer-asan-build/libxml_fuzzer -seed=1 -verbosity=2 -runs=300000 2>&1 | tee logs/libxmlfuzzer-asan-perf.log
-fi
-
-# Convert perf data to LLVM profiling input.
-if ! [ -f perf-data/perf-asan.llvm_prof ]; then
-  create_llvm_prof --binary=./libxmlfuzzer-asan-build/libxml_fuzzer \
-    --profile=perf-data/perf-asan.data \
-    --out=perf-data/perf-asan.llvm_prof
-fi
+# Run the fuzzer under perf. For the moment, we're using the same 300k
+# executions. Use branch tracing because that's what create_llvm_prof wants.
+profile_fuzzer "asan" "-b"
 
 # Re-build libxml2 using profiling data.
-build_libxml_and_fuzzer "asan-2" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof"
+build_libxml_and_fuzzer "asan-pgo" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof"
 
 # Test the fuzzer. Should be faster now, due to PGO
-test_fuzzer "asan-2"
+test_fuzzer "asan-pgo"
 
 # Re-build the fuzzer using ASAP. It should be faster now, due to ASAP.
 build_libxml_and_fuzzer "asap-1000" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=1000"
@@ -137,3 +150,8 @@ build_libxml_and_fuzzer "asap-10" "-fprofile-sample-use=$WORK_DIR/perf-data/perf
 test_fuzzer "asap-10"
 build_libxml_and_fuzzer "asap-1" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=1"
 test_fuzzer "asap-1"
+
+# Profile the original and optimized fuzzer, to see what has changed. Use
+# call-graphs because we want to see where overhead comes from.
+profile_fuzzer "asan-pgo" "--call-graph=dwarf"
+profile_fuzzer "asap-10" "--call-graph=dwarf"
