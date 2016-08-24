@@ -149,6 +149,7 @@ double SanityCheckSampledCost::getExecutionCount(const Instruction *I, const Blo
     ? EntryCount.getValue() : 1;
 
   double scale = (double)Freq.getFrequency() / EntryFreq;
+  assert(scale >= 0 && "Negative block frequency?");
   return AdjustedCount * scale;
 }
 
