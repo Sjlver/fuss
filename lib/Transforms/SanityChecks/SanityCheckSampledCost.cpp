@@ -18,7 +18,9 @@
 #include "llvm/Support/Format.h"
 
 #include <algorithm>
+#include <map>
 #include <memory>
+#include <string>
 #include <system_error>
 #define DEBUG_TYPE "sanity-check-cost"
 
@@ -29,6 +31,12 @@ bool largerCost(const SanityCheckSampledCost::CheckCost &a,
                 const SanityCheckSampledCost::CheckCost &b) {
   return a.second > b.second;
 }
+
+std::map<std::string, uint64_t> KNOWN_FUNCTION_COSTS = {
+  {"__sanitizer_cov", 80},
+  {"__sanitizer_cov_with_check", 80},
+  {"__sanitizer_cov_indir_call16", 80}
+};
 } // anonymous namespace
 
 bool SanityCheckSampledCost::runOnFunction(Function &F) {
@@ -49,7 +57,7 @@ bool SanityCheckSampledCost::runOnFunction(Function &F) {
 #ifndef NDEBUG
     int nInstructions = 0;
     int nFreeInstructions = 0;
-    uint64_t maxCount = 0;
+    double maxCount = 0;
 #endif
 
     // The cost of a check is the sum of the cost of all instructions
@@ -59,6 +67,20 @@ bool SanityCheckSampledCost::runOnFunction(Function &F) {
     double Cost = 0;
     for (Instruction *CI : SCI.getInstructionsBySanityCheck(Inst)) {
       unsigned CurrentCost = sanitychecks::getInstructionCost(CI, &TTI);
+
+      // Use known costs for calls to known instrumentation functions
+      if (auto CallI = dyn_cast<CallInst>(CI)) {
+        auto CalledFunction = CallI->getCalledFunction();
+        StringRef Name = CalledFunction && CalledFunction->hasName() ?
+          CalledFunction->getName() : "";
+        auto CostIt = KNOWN_FUNCTION_COSTS.find(Name);
+        if (CostIt != KNOWN_FUNCTION_COSTS.end()) {
+          CurrentCost = CostIt->second;
+          DEBUG(dbgs() << "Using default cost " << CurrentCost << " for call to \"" << Name << "\"\n");
+        } else {
+          DEBUG(dbgs() << "Missing default cost for call to \"" << Name << "\"\n");
+        }
+      }
 
       // Assume a default cost of 1 for unknown instructions
       if (CurrentCost == (unsigned)(-1)) {
