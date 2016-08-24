@@ -61,38 +61,53 @@ if ! [ -d libxml2-src ]; then
   (cd libxml2-src && ./autogen.sh && make distclean)
 fi
 
-# Initial build; simply AddressSanitizer, no PGO, no ASAP.
-if ! [ -d libxml2-asan-build ]; then
-  mkdir libxml2-asan-build
-  cd libxml2-asan-build
-  CC="$ASAN_CC" CXX="$ASAN_CXX" CFLAGS="$ASAN_CFLAGS" LDFLAGS="$ASAN_LDFLAGS" ../libxml2-src/configure \
-    --prefix "$WORK_DIR/libxml2-asan-install" \
-    --enable-option-checking \
-    --disable-shared --disable-ipv6 \
-    --without-c14n --without-catalog --without-debug --without-docbook --without-ftp --without-http \
-    --without-legacy --without-output --without-pattern --without-push --without-python \
-    --without-reader --without-readline --without-regexps --without-sax1 --without-schemas \
-    --without-schematron --without-threads --without-valid --without-writer --without-xinclude \
-    --without-xpath --without-xptr --without-zlib --without-lzma
-  make -j $N_CORES V=1
-  make install
-  cd ..
-fi
+# Build libxml and the fuzzer, with the given `name` and `extra_cflags`.
+build_libxml_and_fuzzer() {
+  local name="$1"
+  local extra_cflags="$2"
 
-if ! [ -d libxmlfuzzer-asan-build ]; then
-  mkdir libxmlfuzzer-asan-build
-  cd libxmlfuzzer-asan-build
-  "$ASAN_CXX" -c -g -O2 -std=c++11 -I "$WORK_DIR/libxml2-asan-install/include/libxml2" "$SCRIPT_DIR/libxml_fuzzer.cc"
-  "$ASAN_CXX" $ASAN_LDFLAGS libxml_fuzzer.o "$WORK_DIR/libxml2-asan-install/lib/libxml2.a" "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o libxml_fuzzer
-  cd ..
-fi
+  if ! [ -d "libxml2-$name-build" ]; then
+    mkdir "libxml2-$name-build"
+    cd "libxml2-$name-build"
+    CC="$ASAN_CC" CXX="$ASAN_CXX" CFLAGS="$ASAN_CFLAGS $extra_cflags" LDFLAGS="$ASAN_LDFLAGS" ../libxml2-src/configure \
+      --prefix "$WORK_DIR/libxml2-$name-install" \
+      --enable-option-checking \
+      --disable-shared --disable-ipv6 \
+      --without-c14n --without-catalog --without-debug --without-docbook --without-ftp --without-http \
+      --without-legacy --without-output --without-pattern --without-push --without-python \
+      --without-reader --without-readline --without-regexps --without-sax1 --without-schemas \
+      --without-schematron --without-threads --without-valid --without-writer --without-xinclude \
+      --without-xpath --without-xptr --without-zlib --without-lzma
+    make -j $N_CORES V=1
+    make install
+    cd ..
+  fi
+
+  if ! [ -d "libxmlfuzzer-$name-build" ]; then
+    mkdir "libxmlfuzzer-$name-build"
+    cd "libxmlfuzzer-$name-build"
+    "$ASAN_CXX" -c -g -O2 -std=c++11 -I "$WORK_DIR/libxml2-$name-install/include/libxml2" "$SCRIPT_DIR/libxml_fuzzer.cc"
+    "$ASAN_CXX" $ASAN_LDFLAGS libxml_fuzzer.o "$WORK_DIR/libxml2-$name-install/lib/libxml2.a" "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o libxml_fuzzer
+    cd ..
+  fi
+}
+
+# Test the fuzzer with the given `name`.
+test_fuzzer() {
+  local name="$1"
+
+  if ! [ -f "logs/libxmlfuzzer-${name}.log" ]; then
+    mkdir -p logs
+    "./libxmlfuzzer-$name-build/libxml_fuzzer" -seed=1 -verbosity=2 -runs=300000 2>&1 \
+      | tee "logs/libxmlfuzzer-${name}.log"
+  fi
+}
+
+# Initial build; simply AddressSanitizer, no PGO, no ASAP.
+build_libxml_and_fuzzer "asan" ""
 
 # Test the fuzzer. Should take no more than ~20 seconds for 300000 executions.
-if ! [ -f logs/libxmlfuzzer-asan.log ]; then
-  mkdir -p logs
-  ./libxmlfuzzer-asan-build/libxml_fuzzer -seed=1 -verbosity=2 -runs=300000 2>&1 \
-    | tee logs/libxmlfuzzer-asan.log
-fi
+test_fuzzer "asan"
 
 # Run the fuzzer under perf. For the moment, we're using the same 300k executions.
 if ! [ -f perf-data/perf-asan.data ]; then
@@ -100,73 +115,25 @@ if ! [ -f perf-data/perf-asan.data ]; then
   perf record -b -o perf-data/perf-asan.data ./libxmlfuzzer-asan-build/libxml_fuzzer -seed=1 -verbosity=2 -runs=300000 2>&1 | tee logs/libxmlfuzzer-asan-perf.log
 fi
 
-# Convert perf data to LLVM profiling input
+# Convert perf data to LLVM profiling input.
 if ! [ -f perf-data/perf-asan.llvm_prof ]; then
   create_llvm_prof --binary=./libxmlfuzzer-asan-build/libxml_fuzzer \
     --profile=perf-data/perf-asan.data \
     --out=perf-data/perf-asan.llvm_prof
 fi
 
-# Re-build libxml2 using profiling data
-if ! [ -d libxml2-asan-2-build ]; then
-  mkdir libxml2-asan-2-build
-  cd libxml2-asan-2-build
-  CC="$ASAN_CC" CXX="$ASAN_CXX" CFLAGS="$ASAN_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" LDFLAGS="$ASAN_LDFLAGS" ../libxml2-src/configure \
-    --prefix "$WORK_DIR/libxml2-asan-2-install" \
-    --enable-option-checking \
-    --disable-shared --disable-ipv6 \
-    --without-c14n --without-catalog --without-debug --without-docbook --without-ftp --without-http \
-    --without-legacy --without-output --without-pattern --without-push --without-python \
-    --without-reader --without-readline --without-regexps --without-sax1 --without-schemas \
-    --without-schematron --without-threads --without-valid --without-writer --without-xinclude \
-    --without-xpath --without-xptr --without-zlib --without-lzma
-  make -j $N_CORES V=1
-  make install
-  cd ..
-fi
-
-if ! [ -d libxmlfuzzer-asan-2-build ]; then
-  mkdir libxmlfuzzer-asan-2-build
-  cd libxmlfuzzer-asan-2-build
-  "$ASAN_CXX" -c -g -O2 -std=c++11 -I "$WORK_DIR/libxml2-asan-2-install/include/libxml2" "$SCRIPT_DIR/libxml_fuzzer.cc"
-  "$ASAN_CXX" $ASAN_LDFLAGS libxml_fuzzer.o "$WORK_DIR/libxml2-asan-2-install/lib/libxml2.a" "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o libxml_fuzzer
-  cd ..
-fi
+# Re-build libxml2 using profiling data.
+build_libxml_and_fuzzer "asan-2" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof"
 
 # Test the fuzzer. Should be faster now, due to PGO
-if ! [ -f logs/libxmlfuzzer-asan-2.log ]; then
-  ./libxmlfuzzer-asan-2-build/libxml_fuzzer -seed=1 -verbosity=2 -runs=300000 2>&1 \
-    | tee logs/libxmlfuzzer-asan-2.log
-fi
+test_fuzzer "asan-2"
 
-# Re-build the fuzzer using ASAP
-if ! [ -d libxml2-asap-build ]; then
-  mkdir libxml2-asap-build
-  cd libxml2-asap-build
-  CC="$ASAN_CC" CXX="$ASAN_CXX" CFLAGS="$ASAN_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=100" LDFLAGS="$ASAN_LDFLAGS" ../libxml2-src/configure \
-    --prefix "$WORK_DIR/libxml2-asap-install" \
-    --enable-option-checking \
-    --disable-shared --disable-ipv6 \
-    --without-c14n --without-catalog --without-debug --without-docbook --without-ftp --without-http \
-    --without-legacy --without-output --without-pattern --without-push --without-python \
-    --without-reader --without-readline --without-regexps --without-sax1 --without-schemas \
-    --without-schematron --without-threads --without-valid --without-writer --without-xinclude \
-    --without-xpath --without-xptr --without-zlib --without-lzma
-  make -j $N_CORES V=1
-  make install
-  cd ..
-fi
-
-if ! [ -d libxmlfuzzer-asap-build ]; then
-  mkdir libxmlfuzzer-asap-build
-  cd libxmlfuzzer-asap-build
-  "$ASAN_CXX" -c -g -O2 -std=c++11 -I "$WORK_DIR/libxml2-asap-install/include/libxml2" "$SCRIPT_DIR/libxml_fuzzer.cc"
-  "$ASAN_CXX" $ASAN_LDFLAGS libxml_fuzzer.o "$WORK_DIR/libxml2-asap-install/lib/libxml2.a" "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o libxml_fuzzer
-  cd ..
-fi
-
-# Test the fuzzer. Should be faster now, due to ASAP
-if ! [ -f logs/libxmlfuzzer-asap.log ]; then
-  ./libxmlfuzzer-asap-build/libxml_fuzzer -seed=1 -verbosity=2 -runs=300000 2>&1 \
-    | tee logs/libxmlfuzzer-asap.log
-fi
+# Re-build the fuzzer using ASAP. It should be faster now, due to ASAP.
+build_libxml_and_fuzzer "asap-1000" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=1000"
+test_fuzzer "asap-1000"
+build_libxml_and_fuzzer "asap-100" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=100"
+test_fuzzer "asap-100"
+build_libxml_and_fuzzer "asap-10" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=10"
+test_fuzzer "asap-10"
+build_libxml_and_fuzzer "asap-1" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=1"
+test_fuzzer "asap-1"
