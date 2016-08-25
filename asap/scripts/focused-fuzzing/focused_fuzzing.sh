@@ -12,6 +12,15 @@ fi
 mkdir -p logs
 mkdir -p perf-data
 
+if ! clang --version | grep -q asap; then
+  echo "Could not find ASAP's clang. Please set \$PATH correctly." >&2
+  exit 1
+fi
+if ! which create_llvm_prof >/dev/null 2>&1; then
+  echo "Could not find create_llvm_prof. Please set \$PATH correctly." >&2
+  exit 1
+fi
+
 # Experiments with fuzzing libxml. On luke1 (DSLab's development machine, 48
 # cores), calling `rm -rf *-build; time ./focused_fuzzing.sh` takes about 1.5
 # minutes. I think it might make sense to experiment a bit more, and ensure we
@@ -44,6 +53,8 @@ ASAN_CXX="$(which clang++)"
 WORK_DIR="$(pwd)"
 N_CORES=$(getconf _NPROCESSORS_ONLN)
 
+# Set ASAN_OPTIONS to defaults that favor speed over nice output
+export ASAN_OPTIONS="malloc_context_size=0"
 
 if ! [ -d Fuzzer-src ]; then
   git clone https://chromium.googlesource.com/chromium/llvm-project/llvm/lib/Fuzzer Fuzzer-src
