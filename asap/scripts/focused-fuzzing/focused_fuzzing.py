@@ -43,7 +43,7 @@ focused_cflags = basic_cflags + ['-fprofile-sample-use=' +
 focused_ldflags = ['-B/usr/bin/ld.gold']
 focused_ranlib = ['llvm-ranlib']
 logfile = 'focusedfuzzing.log'
-logfile_handler = sys.stdout
+logfile_handler = open(logfile, 'w')
 
 NUM_JOBS = os.cpu_count() or 5
 
@@ -156,10 +156,16 @@ def fuzzer_startup():
     if not os.path.isdir(running_setup['corpus']):
         os.mkdir(running_setup['corpus'])
 
+def fuzzer_exec_present():
+    exec_path = os.path.join(pwd, libxml_exec)
+    if not os.path.isfile(exec_path):
+        return False
+    return True
+
 def start_fuzzer_process():
     exec_path = os.path.join(pwd, libxml_exec)
     corpus_path = os.path.join(pwd, running_setup['corpus'])
-    if not os.path.isfile(exec_path):
+    if not fuzzer_exec_present():
         logging.error('The fuzzer executable could not be built.')
         return None
 
@@ -172,10 +178,8 @@ def start_fuzzer_process():
         detect_odr_violation=0:
         poison_heap=false:
         quarantine_size_mb=0:
-        report_globals=0:
-        coverage=1:
-        html_cov_report=1'''
-    start_fuzzer_command = ['taskset', '-c', '3', exec_path, corpus_path, '-close_fd_mask=2',
+        report_globals=0'''
+    start_fuzzer_command = ['taskset', '-c', '3', exec_path, '-close_fd_mask=2',
             '-max_len=' + str(running_setup['max_len']), '-seed=' + str(running_setup['seed']), '-print_final_stats=1', '-runs=500000']
 
     logging.debug('Start libxml fuzzer command:\n\t%s', ' '.join(start_fuzzer_command))
@@ -196,14 +200,11 @@ def main(clean=False, full=False):
         fuzzer_startup()
         return
 
-    if clean:
+    if clean or (not fuzzer_exec_present()):
         fuzzer_startup()
 
     cycles = 0
     while True:
-        #corpus_path = os.path.join(pwd, running_setup['corpus'])
-        #clear_dir(corpus_path)
-
         libxml_proc_popen = start_fuzzer_process()
         libxml_proc_data = Process(libxml_proc_popen)
         libxml_proc_data.start_monitoring()
@@ -314,3 +315,4 @@ if __name__ == "__main__":
             running_setup['max_len'], running_setup['seed'], running_setup['asap_cost_threshold'])
 
     main(clean=res['clean'], full=res['full'])
+    logfile_handler.close()
