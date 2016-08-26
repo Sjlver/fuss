@@ -26,7 +26,6 @@ fuzzer_running = False
 
 fuzzer_src = 'Fuzzer/'
 libxml_src_dir = 'libxml_src/'
-libxml_target_fuzzer = 'libxml_fuzzer.cc'
 
 libxml_exec = 'libxml'
 libxml_obj = 'libxml_fuzzer.o'
@@ -34,6 +33,8 @@ llvm_prof_path = 'perf.llvm_prof'
 
 pwd = os.getcwd()
 prefix = os.path.join(pwd, 'inst')
+
+libxml_target_fuzzer = os.path.join(pwd, 'libxml_fuzzer.cc')
 
 cov_flags = "-fsanitize-coverage=edge,indirect-calls"
 basic_cflags = ['-O2', '-g', '-fsanitize=address', cov_flags]
@@ -43,7 +44,6 @@ focused_cflags = basic_cflags + ['-fprofile-sample-use=' +
 focused_ldflags = ['-B/usr/bin/ld.gold']
 focused_ranlib = ['llvm-ranlib']
 logfile = 'focusedfuzzing.log'
-logfile_handler = open(logfile, 'w')
 
 NUM_JOBS = os.cpu_count() or 5
 
@@ -140,9 +140,8 @@ def fuzzer_startup():
         subprocess.check_call(['git', 'checkout', '-b', 'old',
             '3a76bfeddeac9c331f761e45db6379c36c8876c3'], stdout=logfile_handler)
         os.chdir('../')
-    if not os.path.exists(os.path.join(os.getcwd(), libxml_target_fuzzer)):
-        logging.error('Could not find target fuzzer: %s',
-                os.path.join(os.getcwd(), libxml_target_fuzzer))
+    if not os.path.exists(libxml_target_fuzzer):
+        logging.error('Could not find target fuzzer: %s', libxml_target_fuzzer)
         return
 
     focused_build()
@@ -275,9 +274,6 @@ def get_arg(param):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    logging.getLogger().addHandler(logging.FileHandler(logfile))
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--command')
     parser.add_argument('--corpus', default='CORPUS')
@@ -289,7 +285,6 @@ if __name__ == "__main__":
     parser.add_argument('--full', action='store_true')
     res = vars(parser.parse_args(sys.argv[1:]))
 
-    logging.debug("Arguments:\n%s", res)
     if res['command'] == 'clean':
         try:
             subprocess.check_call(['rm', '-r', 'CORPUS'] + \
@@ -304,9 +299,31 @@ if __name__ == "__main__":
     running_setup['seed'] = int(res['seed'])
     running_setup['asap_cost_threshold'] = int(res['asap_cost_threshold'])
 
+    build_dir = 'libxmlfuzzer-asap-%d-build' % running_setup['asap_cost_threshold']
+    if not os.path.isdir(build_dir):
+        os.mkdir(build_dir)
+    os.chdir(build_dir)
+
+    logfile_handler = open(logfile, 'w')
+    logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger().addHandler(logging.FileHandler(logfile))
+    logging.debug("Arguments:\n%s", res)
+
+    pwd = os.getcwd()
+    prefix = os.path.join(pwd, 'inst')
+
     focused_cflags = basic_cflags + ['-fprofile-sample-use=' +
         os.path.join(os.getcwd(), llvm_prof_path), '-B/usr/bin/ld.gold',
         '-fsanitize=asap', '-mllvm', '-asap-cost-threshold=' + str(running_setup['asap_cost_threshold'])]
+    build_fuzzer_cmd = ['clang++', '-g'] + basic_cflags + ['-c', '-std=c++11',
+        '-I' + prefix + '/include/libxml2', libxml_target_fuzzer]
+
+    link_fuzzer_cmd = ['clang++', '-B/usr/bin/ld.gold', '-fsanitize=address', cov_flags,
+            '-o', libxml_exec,
+            libxml_obj,
+            os.path.join(prefix, 'lib', 'libxml2.a'),
+            'libFuzzer.a']
+
 
     logging.info('Running focused fuzzer with the following parameters:\n\t' +
             'corpus path:[%s] sampling_time:[%d] max_len:[%d] ' +
