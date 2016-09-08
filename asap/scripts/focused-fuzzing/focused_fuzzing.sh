@@ -123,7 +123,7 @@ profile_fuzzer() {
 
   # For the moment, we're using the same 300k executions that we use for benchmarking.
   if ! [ -f "perf-data/perf-${name}.data" ]; then
-    perf record "$perf_args" -o "perf-data/perf-${name}.data" \
+    perf record $perf_args -o "perf-data/perf-${name}.data" \
       "./libxmlfuzzer-$name-build/libxml_fuzzer" -seed=1 -verbosity=2 -runs=300000 2>&1 \
       | tee "logs/libxmlfuzzer-$name-perf.log"
   fi
