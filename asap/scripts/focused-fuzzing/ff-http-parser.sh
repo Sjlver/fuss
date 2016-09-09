@@ -34,6 +34,10 @@ N_CORES=$(getconf _NPROCESSORS_ONLN)
 # Set ASAN_OPTIONS to defaults that favor speed over nice output
 export ASAN_OPTIONS="malloc_context_size=0"
 
+# The number of seconds for which we run fuzzers during testing and profiling
+FUZZER_TESTING_SECONDS=20
+FUZZER_PROFILING_SECONDS=20
+
 if ! [ -d Fuzzer-src ]; then
   git clone https://chromium.googlesource.com/chromium/llvm-project/llvm/lib/Fuzzer Fuzzer-src
   (cd Fuzzer-src && git checkout -b release_37 95daeb3e343c6b64524acbeaa01b941111145c2e)
@@ -56,9 +60,9 @@ build_target_and_fuzzer() {
   local name="$1"
   local extra_cflags="$2"
 
-  if ! [ -d "http-parser-$name-build" ]; then
-    mkdir "http-parser-$name-build"
-    cd "http-parser-$name-build"
+  if ! [ -d "http-parser-${name}-build" ]; then
+    mkdir "http-parser-${name}-build"
+    cd "http-parser-${name}-build"
     "$CC" $HTTP_PARSER_CFLAGS $ASAN_CFLAGS $extra_cflags -I ../http-parser-src -c ../http-parser-src/http_parser.c -o http_parser.o
     "$CC" $ASAN_CFLAGS $extra_cflags -I ../http-parser-src -c "$SCRIPT_DIR/ff-http-parser.c" -o ff-http-parser.o
     "$CXX" $ASAN_LDFLAGS ff-http-parser.o http_parser.o "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o ff-http-parser
@@ -71,7 +75,10 @@ test_fuzzer() {
   local name="$1"
 
   if ! [ -f "logs/ff-http-parser-${name}.log" ]; then
-    "./http-parser-$name-build/ff-http-parser" -seed=1 -verbosity=2 -runs=10000000 2>&1 \
+    rm -rf "http-parser-${name}-build/CORPUS"
+    mkdir -p "http-parser-${name}-build/CORPUS"
+    "./http-parser-${name}-build/ff-http-parser" -seed=1 -max_total_time=$FUZZER_TESTING_SECONDS \
+      -print_final_stats=1 "http-parser-${name}-build/CORPUS" 2>&1 \
       | tee "logs/ff-http-parser-${name}.log"
   fi
 }
@@ -81,18 +88,28 @@ profile_fuzzer() {
   local name="$1"
   local perf_args="$2"
 
-  # For the moment, we're using the same executions that we use for benchmarking.
   if ! [ -f "perf-data/perf-${name}.data" ]; then
     perf record $perf_args -o "perf-data/perf-${name}.data" \
-      "./http-parser-$name-build/ff-http-parser" -seed=1 -verbosity=2 -runs=10000000 2>&1 \
+      "./http-parser-${name}-build/ff-http-parser" -seed=1 -max_total_time=$FUZZER_PROFILING_SECONDS \
+      -print_final_stats=1 2>&1 \
       | tee "logs/ff-http-parser-$name-perf.log"
   fi
 
   # Convert perf data to LLVM profiling input.
   if ! [ -f "perf-data/perf-${name}.llvm_prof" ] && echo " $perf_args " | grep -q -- ' -b '; then
-    create_llvm_prof --binary="http-parser-$name-build/ff-http-parser" \
+    create_llvm_prof --binary="http-parser-${name}-build/ff-http-parser" \
       --profile="perf-data/perf-${name}.data" \
       --out="perf-data/perf-${name}.llvm_prof"
+  fi
+}
+
+# See what coverage the fuzzer with the given `name` achieved
+compute_coverage() {
+  local name="$1"
+
+  if ! [ -f "logs/ff-http-parser-${name}-coverage.log" ]; then
+    "./http-parser-asan-pgo-build/ff-http-parser" -seed=1 -runs=0 "http-parser-${name}-build/CORPUS" 2>&1 \
+      | tee "logs/ff-http-parser-${name}-coverage.log"
   fi
 }
 
@@ -111,18 +128,45 @@ build_target_and_fuzzer "asan-pgo" "-fprofile-sample-use=$WORK_DIR/perf-data/per
 
 # Test the fuzzer. Should be faster now, due to PGO
 test_fuzzer "asan-pgo"
+compute_coverage "asan-pgo"
 
-# Re-build the fuzzer using ASAP. It should be faster now, due to ASAP.
-build_target_and_fuzzer "asap-1000" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=1000"
-test_fuzzer "asap-1000"
-build_target_and_fuzzer "asap-100" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=100"
-test_fuzzer "asap-100"
-build_target_and_fuzzer "asap-10" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=10"
-test_fuzzer "asap-10"
-build_target_and_fuzzer "asap-1" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=1"
-test_fuzzer "asap-1"
+# Build and test various cost thresholds
+for threshold in 1000 500 200 100 90 80 70 60 50 40 30 20 10 5 2 1; do
+  build_target_and_fuzzer "asap-$threshold" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=$threshold"
+  test_fuzzer "asap-$threshold"
+  compute_coverage "asap-$threshold"
+done
 
 # Profile the original and optimized fuzzer, to see what has changed. Use
 # call-graphs because we want to see where overhead comes from.
 profile_fuzzer "asan-pgo" "--call-graph=dwarf"
 profile_fuzzer "asap-10" "--call-graph=dwarf"
+
+# Print out a summary that we can export to spreadsheet
+(
+  echo
+  echo "Summary"
+  echo "======="
+  echo
+  echo -e "name\tcov\tbits\texecs\texecs_per_sec\tunits\tactual_cov\tactual_bits"
+
+  for name in asan-pgo asap-1000 asap-500 asap-200 asap-100 \
+      asap-90 asap-80 asap-70 asap-60 asap-50 asap-40 asap-30 asap-20 asap-10 \
+      asap-5 asap-2 asap-1; do
+
+    # Get cov, bits from the last output line
+    cov="$(grep '#[0-9]*.*DONE' logs/ff-http-parser-${name}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
+    bits="$(grep '#[0-9]*.*DONE' logs/ff-http-parser-${name}.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
+
+    # Get units and execs/s from the final stats
+    execs="$(grep 'stat::number_of_executed_units:' logs/ff-http-parser-${name}.log | grep -o '[0-9]*')"
+    execs_per_sec="$(grep 'stat::average_exec_per_sec:' logs/ff-http-parser-${name}.log | grep -o '[0-9]*')"
+    units="$(grep 'stat::new_units_added:' logs/ff-http-parser-${name}.log | grep -o '[0-9]*')"
+
+    # Get actual coverage from running the corpus against the PGO version
+    actual_cov="$(grep '#[0-9]*.*DONE' logs/ff-http-parser-${name}-coverage.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
+    actual_bits="$(grep '#[0-9]*.*DONE' logs/ff-http-parser-${name}-coverage.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
+
+    echo -e "$name\t$cov\t$bits\t$execs\t$execs_per_sec\t$units\t$actual_cov\t$actual_bits"
+  done
+) | tee logs/summary.log
