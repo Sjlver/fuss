@@ -21,9 +21,8 @@ if ! which create_llvm_prof >/dev/null 2>&1; then
   exit 1
 fi
 
-HTTP_PARSER_CFLAGS="-DHTTP_PARSER_STRICT=0"
 LIBFUZZER_CFLAGS="-O3 -g -Wall -std=c++11"
-ASAN_CFLAGS="-O3 -g -Wall -Wextra -Werror -Wno-unused-parameter -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters"
+ASAN_CFLAGS="-O3 -g -Wall -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters"
 ASAN_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters"
 CC="$(which clang)"
 CXX="$(which clang++)"
@@ -54,21 +53,39 @@ if ! [ -d Fuzzer-build ]; then
   cd ..
 fi
 
-if ! [ -d http-parser-src ]; then
-  git clone git@github.com:nodejs/http-parser.git http-parser-src
+if ! [ -d libxml2-src ]; then
+  git clone git://git.gnome.org/libxml2 libxml2-src
+  (cd libxml2-src && git checkout -b old 3a76bfeddeac9c331f761e45db6379c36c8876c3)
+  (cd libxml2-src && ./autogen.sh && make distclean)
 fi
 
-# Build http-parser with the given `name` and `extra_cflags`.
+# Build libxml with the given `name` and `extra_cflags`.
 build_target_and_fuzzer() {
   local name="$1"
   local extra_cflags="$2"
 
-  if ! [ -d "http-parser-${name}-build" ]; then
-    mkdir "http-parser-${name}-build"
-    cd "http-parser-${name}-build"
-    "$CC" $HTTP_PARSER_CFLAGS $ASAN_CFLAGS $extra_cflags -I ../http-parser-src -c ../http-parser-src/http_parser.c -o http_parser.o
-    "$CC" $ASAN_CFLAGS $extra_cflags -I ../http-parser-src -c "$SCRIPT_DIR/ff-http-parser.c" -o ff-http-parser.o
-    "$CXX" $ASAN_LDFLAGS ff-http-parser.o http_parser.o "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o ff-http-parser
+  if ! [ -d "libxml2-${name}-build" ]; then
+    mkdir "libxml2-${name}-build"
+    cd "libxml2-${name}-build"
+    CC="$CC" CXX="$CXX" CFLAGS="$ASAN_CFLAGS $extra_cflags" LDFLAGS="$ASAN_LDFLAGS" ../libxml2-src/configure \
+      --prefix "$WORK_DIR/libxml2-${name}-install" \
+      --enable-option-checking \
+      --disable-shared --disable-ipv6 \
+      --without-c14n --without-catalog --without-debug --without-docbook --without-ftp --without-http \
+      --without-legacy --without-output --without-pattern --without-push --without-python \
+      --without-reader --without-readline --without-regexps --without-sax1 --without-schemas \
+      --without-schematron --without-threads --without-valid --without-writer --without-xinclude \
+      --without-xpath --without-xptr --without-zlib --without-lzma
+    make -j $N_CORES V=1 2>&1 | tee "../logs/libxml2-${name}-build.log"
+    make install
+    cd ..
+  fi
+
+  if ! [ -d "libxmlfuzzer-${name}-build" ]; then
+    mkdir "libxmlfuzzer-${name}-build"
+    cd "libxmlfuzzer-${name}-build"
+    "$CXX" -c -g -O2 -std=c++11 -I "$WORK_DIR/libxml2-${name}-install/include/libxml2" "$SCRIPT_DIR/libxml_fuzzer.cc"
+    "$CXX" $ASAN_LDFLAGS libxml_fuzzer.o "$WORK_DIR/libxml2-${name}-install/lib/libxml2.a" "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o libxml_fuzzer
     cd ..
   fi
 }
@@ -77,12 +94,12 @@ build_target_and_fuzzer() {
 test_fuzzer() {
   local name="$1"
 
-  if ! [ -f "logs/ff-http-parser-${name}.log" ]; then
-    rm -rf "http-parser-${name}-build/CORPUS"
-    mkdir -p "http-parser-${name}-build/CORPUS"
-    "./http-parser-${name}-build/ff-http-parser" -seed=1 -max_total_time=$FUZZER_TESTING_SECONDS \
-      -print_final_stats=1 "http-parser-${name}-build/CORPUS" 2>&1 \
-      | tee "logs/ff-http-parser-${name}.log"
+  if ! [ -f "logs/libxmlfuzzer-${name}.log" ]; then
+    rm -rf "libxmlfuzzer-${name}-build/CORPUS"
+    mkdir -p "libxmlfuzzer-${name}-build/CORPUS"
+    "./libxmlfuzzer-${name}-build/libxml_fuzzer" -seed=1 -max_total_time=$FUZZER_TESTING_SECONDS \
+      -print_final_stats=1 "libxmlfuzzer-${name}-build/CORPUS" 2>&1 \
+      | tee "logs/libxmlfuzzer-${name}.log"
   fi
 }
 
@@ -93,14 +110,14 @@ profile_fuzzer() {
 
   if ! [ -f "perf-data/perf-${name}.data" ]; then
     perf record $perf_args -o "perf-data/perf-${name}.data" \
-      "./http-parser-${name}-build/ff-http-parser" -seed=1 -max_total_time=$FUZZER_PROFILING_SECONDS \
+      "./libxmlfuzzer-${name}-build/libxml_fuzzer" -seed=1 -max_total_time=$FUZZER_PROFILING_SECONDS \
       -print_final_stats=1 2>&1 \
-      | tee "logs/ff-http-parser-${name}-perf.log"
+      | tee "logs/libxmlfuzzer-${name}-perf.log"
   fi
 
   # Convert perf data to LLVM profiling input.
   if ! [ -f "perf-data/perf-${name}.llvm_prof" ] && echo " $perf_args " | grep -q -- ' -b '; then
-    create_llvm_prof --binary="http-parser-${name}-build/ff-http-parser" \
+    create_llvm_prof --binary="libxmlfuzzer-${name}-build/libxml_fuzzer" \
       --profile="perf-data/perf-${name}.data" \
       --out="perf-data/perf-${name}.llvm_prof"
   fi
@@ -110,9 +127,9 @@ profile_fuzzer() {
 compute_coverage() {
   local name="$1"
 
-  if ! [ -f "logs/ff-http-parser-${name}-coverage.log" ]; then
-    "./http-parser-asan-pgo-build/ff-http-parser" -seed=1 -runs=0 "http-parser-${name}-build/CORPUS" 2>&1 \
-      | tee "logs/ff-http-parser-${name}-coverage.log"
+  if ! [ -f "logs/libxmlfuzzer-${name}-coverage.log" ]; then
+    "./libxmlfuzzer-asan-pgo-build/libxml_fuzzer" -seed=1 -runs=0 "libxmlfuzzer-${name}-build/CORPUS" 2>&1 \
+      | tee "logs/libxmlfuzzer-${name}-coverage.log"
   fi
 }
 
@@ -155,17 +172,17 @@ echo
 
   for name in asan-pgo $(for i in $THRESHOLDS; do echo asap-$i; done); do
     # Get cov, bits from the last output line
-    cov="$(grep '#[0-9]*.*DONE' logs/ff-http-parser-${name}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
-    bits="$(grep '#[0-9]*.*DONE' logs/ff-http-parser-${name}.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
+    cov="$(grep '#[0-9]*.*DONE' logs/libxmlfuzzer-${name}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
+    bits="$(grep '#[0-9]*.*DONE' logs/libxmlfuzzer-${name}.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
 
     # Get units and execs/s from the final stats
-    execs="$(grep 'stat::number_of_executed_units:' logs/ff-http-parser-${name}.log | grep -o '[0-9]*')"
-    execs_per_sec="$(grep 'stat::average_exec_per_sec:' logs/ff-http-parser-${name}.log | grep -o '[0-9]*')"
-    units="$(grep 'stat::new_units_added:' logs/ff-http-parser-${name}.log | grep -o '[0-9]*')"
+    execs="$(grep 'stat::number_of_executed_units:' logs/libxmlfuzzer-${name}.log | grep -o '[0-9]*')"
+    execs_per_sec="$(grep 'stat::average_exec_per_sec:' logs/libxmlfuzzer-${name}.log | grep -o '[0-9]*')"
+    units="$(grep 'stat::new_units_added:' logs/libxmlfuzzer-${name}.log | grep -o '[0-9]*')"
 
     # Get actual coverage from running the corpus against the PGO version
-    actual_cov="$(grep '#[0-9]*.*DONE' logs/ff-http-parser-${name}-coverage.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
-    actual_bits="$(grep '#[0-9]*.*DONE' logs/ff-http-parser-${name}-coverage.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
+    actual_cov="$(grep '#[0-9]*.*DONE' logs/libxmlfuzzer-${name}-coverage.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
+    actual_bits="$(grep '#[0-9]*.*DONE' logs/libxmlfuzzer-${name}-coverage.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
 
     echo -e "$name\t$cov\t$bits\t$execs\t$execs_per_sec\t$units\t$actual_cov\t$actual_bits"
   done
