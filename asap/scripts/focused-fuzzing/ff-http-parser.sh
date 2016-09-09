@@ -38,6 +38,9 @@ export ASAN_OPTIONS="malloc_context_size=0"
 FUZZER_TESTING_SECONDS=20
 FUZZER_PROFILING_SECONDS=20
 
+# Which thresholds should we test?
+THRESHOLDS="5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1"
+
 if ! [ -d Fuzzer-src ]; then
   git clone https://chromium.googlesource.com/chromium/llvm-project/llvm/lib/Fuzzer Fuzzer-src
   (cd Fuzzer-src && git checkout -b release_37 95daeb3e343c6b64524acbeaa01b941111145c2e)
@@ -131,7 +134,7 @@ test_fuzzer "asan-pgo"
 compute_coverage "asan-pgo"
 
 # Build and test various cost thresholds
-for threshold in 1000 500 200 100 90 80 70 60 50 40 30 20 10 5 2 1; do
+for threshold in $THRESHOLDS; do
   build_target_and_fuzzer "asap-$threshold" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=$threshold"
   test_fuzzer "asap-$threshold"
   compute_coverage "asap-$threshold"
@@ -139,21 +142,18 @@ done
 
 # Profile the original and optimized fuzzer, to see what has changed. Use
 # call-graphs because we want to see where overhead comes from.
-profile_fuzzer "asan-pgo" "--call-graph=dwarf"
-profile_fuzzer "asap-10" "--call-graph=dwarf"
+#profile_fuzzer "asan-pgo" "--call-graph=dwarf"
+#profile_fuzzer "asap-10" "--call-graph=dwarf"
 
 # Print out a summary that we can export to spreadsheet
+echo
+echo "Summary"
+echo "======="
+echo
 (
-  echo
-  echo "Summary"
-  echo "======="
-  echo
   echo -e "name\tcov\tbits\texecs\texecs_per_sec\tunits\tactual_cov\tactual_bits"
 
-  for name in asan-pgo asap-1000 asap-500 asap-200 asap-100 \
-      asap-90 asap-80 asap-70 asap-60 asap-50 asap-40 asap-30 asap-20 asap-10 \
-      asap-5 asap-2 asap-1; do
-
+  for name in asan-pgo $(for i in $THRESHOLDS; do echo asap-$i; done); do
     # Get cov, bits from the last output line
     cov="$(grep '#[0-9]*.*DONE' logs/ff-http-parser-${name}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
     bits="$(grep '#[0-9]*.*DONE' logs/ff-http-parser-${name}.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
