@@ -17,34 +17,32 @@ import fnmatch
 
 
 ###### Default running params
-default_setup = {'corpus':'CORPUS', 'sampling_time':20, 'max_len':2000, 'seed':0, 'asap_cost_threshold':1000}
+default_setup = {'corpus':'CORPUS', 'sampling_time':20, 'max_len':2000, 'seed':0, 'max_total_time':20, 'asap_cost_threshold':1000, 'sw':'libxml'}
 running_setup = default_setup
 
 
 ##### Commands and configuration parameters
 fuzzer_running = False
 
-fuzzer_src = 'Fuzzer/'
-libxml_src_dir = 'libxml_src/'
+fuzzer_src = 'Fuzzer'
+src_dir = {'libxml':'libxml_src', 'pcre':'pcre_src', 'http_parser':'http_parser_src'}
 
-libxml_exec = 'libxml'
-libxml_obj = 'libxml_fuzzer.o'
+exec_file = {'libxml':'libxml', 'pcre':'pcre', 'http_parser':'http_parser'}
+source_file = {'libxml':'libxml_fuzzer.cc', 'pcre':'pcre_fuzzer.cc', 'http_parser':'http_parser.cc'}
+obj_file = {'libxml':'libxml_fuzzer.o', 'pcre':'pcre_fuzzer.o', 'http_parser':'http_parser.o'}
 llvm_prof_path = 'perf.llvm_prof'
 
-pwd = os.getcwd()
-prefix = os.path.join(pwd, 'inst')
+global prefix
 
-libxml_target_fuzzer = os.path.join(pwd, 'libxml_fuzzer.cc')
+cov_flags = None
+basic_cflags = None
+focused_cflags = None
+focused_ldflags = None
+focused_ranlib = None
 
-cov_flags = "-fsanitize-coverage=edge,indirect-calls"
-basic_cflags = ['-O2', '-g', '-fsanitize=address', cov_flags]
-focused_cflags = basic_cflags + ['-fprofile-sample-use=' +
-        os.path.join(os.getcwd(), llvm_prof_path), '-B/usr/bin/ld.gold',
-        '-fsanitize=asap', '-mllvm', '-asap-cost-threshold=' + str(default_setup['asap_cost_threshold'])]
-focused_ldflags = ['-B/usr/bin/ld.gold']
-focused_ranlib = ['llvm-ranlib']
+build_fuzzer_cmd = None
+
 logfile = 'focusedfuzzing.log'
-
 NUM_JOBS = os.cpu_count() or 5
 
 def which(program):
@@ -60,42 +58,39 @@ def file_pattern(root, pattern):
             files.append(os.path.join(root, file))
     return files
 
-build_fuzzer_cmd = ['clang++', '-g'] + basic_cflags + ['-c', '-std=c++11',
-    '-I' + prefix + '/include/libxml2', libxml_target_fuzzer]
-
-link_fuzzer_cmd = ['clang++', '-B/usr/bin/ld.gold', '-fsanitize=address', cov_flags,
-        '-o', libxml_exec,
-        libxml_obj,
-        os.path.join(prefix, 'lib', 'libxml2.a'),
-        'libFuzzer.a']
-
 def focused_build(cflags=None, ldflags=None, ranlib=None):
-    os.chdir(libxml_src_dir)
+    os.chdir(src_dir[running_setup['sw']])
     try:
         subprocess.check_call(['make', 'clean'], stdout=logfile_handler)
     except subprocess.CalledProcessError:
         logging.exception('Exception during focused_build:')
 
-    subprocess.check_call(['./autogen.sh'], stdout=logfile_handler)
+    if not os.path.isfile('configure'):
+        subprocess.check_call(['./autogen.sh'], stdout=logfile_handler)
 
     if not os.path.isdir(prefix):
         os.mkdir(prefix)
     env_vars = dict(os.environ)
-    env_vars['CC'] = which('clang')
+    env_vars['PATH'] = '/home/alex/asap/build/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games'
+    env_vars['CC'] = which('clang') + str.encode(' -fsanitize=address ' + cov_flags)
     env_vars['CXX'] = which('clang++')
-    configure_call = ['./configure', '--prefix=' + prefix, '--enable-option-checking',
+    configure_call = {'libxml': ['./configure', '--prefix=' + prefix, '--enable-option-checking',
             '--disable-shared', '--disable-ipv6',
             '--without-c14n', '--without-catalog', '--without-debug', '--without-docbook', '--without-ftp', '--without-http',
             '--without-legacy', '--without-output', '--without-pattern', '--without-push', '--without-python',
             '--without-reader', '--without-readline', '--without-regexps', '--without-sax1', '--without-schemas',
             '--without-schematron', '--without-threads', '--without-valid', '--without-writer', '--without-xinclude',
-            '--without-xpath', '--without-xptr', '--without-zlib', '--without-lzma']
-    logging.debug('Start configure command:\n\t%s', ' '.join(configure_call))
-    subprocess.check_call(configure_call, env=env_vars, stdout=logfile_handler)
+            '--without-xpath', '--without-xptr', '--without-zlib', '--without-lzma'],
+            'pcre':['./configure', '--prefix=' + prefix, '--disable-shared'],
+            'http_parser':[]}
+
+    logging.debug('Start configure command:\n\t%s', ' '.join(configure_call[running_setup['sw']]))
+    if len(configure_call[running_setup['sw']]):
+        subprocess.check_call(configure_call[running_setup['sw']], env=env_vars, stdout=logfile_handler)
 
     if cflags is None:
         cflags = basic_cflags
-    basic_fuzzer_command = ['make', '-j', str(NUM_JOBS), 'V=1', 'CFLAGS=' + ' '.join(cflags)]
+    basic_fuzzer_command = ['make', '-j', str(NUM_JOBS), 'V=1', 'CC=clang', 'CFLAGS=' + ' '.join(cflags)]
 
     if ldflags:
         basic_fuzzer_command.append('LDFLAGS=' + ' '.join(ldflags))
@@ -109,11 +104,24 @@ def focused_build(cflags=None, ldflags=None, ranlib=None):
             stderr=subprocess.STDOUT)
 
     try:
-        subprocess.check_call(['make', 'install'], stdout=logfile_handler)
+        env_vars = dict(os.environ)
+        env_vars['PREFIX'] = prefix
+        subprocess.check_call(['make', 'install'], env=env_vars, stdout=logfile_handler)
     except subprocess.CalledProcessError:
         logging.exception("Exception while running `make install`:")
 
     os.chdir('../')
+
+def update_link_fuzzer_command():
+    libs = file_pattern(os.path.join(prefix, 'lib'), '*.a')
+    libs_str = ' '.join(['-Wl,--whole-archive ' + l for l in libs])
+    if running_setup['sw'] == 'http_parser':
+        libs_str = os.path.join(src_dir['http_parser'], 'http_parser.o')
+
+    return ['clang++', '-B/usr/bin/ld.gold', '-fsanitize=address', cov_flags,
+            '-o', exec_file[running_setup['sw']], obj_file[running_setup['sw']]] +\
+                    libs_str.split() + ['-Wl,--no-whole-archive', 'libFuzzer.a']
+
 
 def link_fuzzer(remove=True):
     if (not remove) and (not os.path.isfile('libFuzzer.a')):
@@ -128,20 +136,33 @@ def link_fuzzer(remove=True):
 
     logging.info('Running command \n\t%s', ' '.join(build_fuzzer_cmd))
     subprocess.check_call(build_fuzzer_cmd, stdout=logfile_handler)
+
+    link_fuzzer_cmd = update_link_fuzzer_command() #needs to be done in case of clean build
     logging.info('Running command \n\t%s', ' '.join(link_fuzzer_cmd))
     subprocess.check_call(link_fuzzer_cmd, stdout=logfile_handler)
 
 def fuzzer_startup():
-    if not os.path.isdir(os.path.join(os.getcwd(), libxml_src_dir)):
-        #clone libxml
-        subprocess.check_call(['git', 'clone',
-        'git://git.gnome.org/libxml2', libxml_src_dir], stdout=logfile_handler)
-        os.chdir(libxml_src_dir)
-        subprocess.check_call(['git', 'checkout', '-b', 'old',
-            '3a76bfeddeac9c331f761e45db6379c36c8876c3'], stdout=logfile_handler)
+    if not os.path.isdir(os.path.join(os.getcwd(), src_dir[running_setup['sw']])):
+        #clone sw
+        download = {'libxml':['git', 'clone', 'git://git.gnome.org/libxml2', src_dir[running_setup['sw']]],
+                'pcre':['wget', 'ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre/pcre2-10.20.tar.gz'],
+                'http_parser':['git', 'clone', 'https://github.com/nodejs/http-parser.git', src_dir[running_setup['sw']]]}
+
+        subprocess.check_call(download[running_setup['sw']], stdout=logfile_handler)
+
+        if (running_setup['sw'] == 'pcre'):
+            subprocess.check_call(['tar', 'xf', 'pcre2-10.20.tar.gz', '--transform=s/pcre2-10.20/' + src_dir['pcre'] + '/'])
+
+        os.chdir(src_dir[running_setup['sw']])
+        git_revision = {'libxml':'3a76bfeddeac9c331f761e45db6379c36c8876c3',
+                'pcre':'911bc707c0bfc81953d04b719dfcb39ae3520ba3',
+                'http_parser':'feae95a3a69f111bc1897b9048d9acbc290992f9'}
+        if running_setup['sw'] == 'libxml':
+            subprocess.check_call(['git', 'checkout', '-b', 'old',
+                git_revision[running_setup['sw']]], stdout=logfile_handler)
         os.chdir('../')
-    if not os.path.exists(libxml_target_fuzzer):
-        logging.error('Could not find target fuzzer: %s', libxml_target_fuzzer)
+    if not os.path.exists(target_fuzzer):
+        logging.error('Could not find target fuzzer: %s', target_fuzzer)
         return
 
     focused_build()
@@ -156,13 +177,13 @@ def fuzzer_startup():
         os.mkdir(running_setup['corpus'])
 
 def fuzzer_exec_present():
-    exec_path = os.path.join(pwd, libxml_exec)
+    exec_path = os.path.join(pwd, exec_file[running_setup['sw']])
     if not os.path.isfile(exec_path):
         return False
     return True
 
 def start_fuzzer_process():
-    exec_path = os.path.join(pwd, libxml_exec)
+    exec_path = os.path.join(pwd, exec_file[running_setup['sw']])
     corpus_path = os.path.join(pwd, running_setup['corpus'])
     if not fuzzer_exec_present():
         logging.error('The fuzzer executable could not be built.')
@@ -178,15 +199,15 @@ def start_fuzzer_process():
         poison_heap=false:
         quarantine_size_mb=0:
         report_globals=0'''
-    start_fuzzer_command = ['taskset', '-c', '3', exec_path, '-close_fd_mask=2',
-            '-max_len=' + str(running_setup['max_len']), '-seed=' + str(running_setup['seed']), '-print_final_stats=1', '-runs=500000']
+    start_fuzzer_command = [exec_path, '-close_fd_mask=2', '-max_len=' + str(running_setup['max_len']),
+            '-seed=' + str(running_setup['seed']), '-print_final_stats=1',
+            '-max_total_time=' + str(running_setup['max_total_time'])]
 
-    logging.debug('Start libxml fuzzer command:\n\t%s', ' '.join(start_fuzzer_command))
+    logging.debug('Start fuzzer command:\n\t%s', ' '.join(start_fuzzer_command))
     logging.debug('asap-cost-threshold:[%d]', running_setup['asap_cost_threshold'])
 
-    libxml_proc = subprocess.Popen(start_fuzzer_command, env=env_vars, stdout=logfile_handler,
+    return subprocess.Popen(start_fuzzer_command, env=env_vars, stdout=logfile_handler,
             stderr=subprocess.STDOUT)
-    return libxml_proc
 
 def clear_dir(name):
     filelist = [f for f in os.listdir(name)]
@@ -204,14 +225,14 @@ def main(clean=False, full=False):
 
     cycles = 0
     while True:
-        libxml_proc_popen = start_fuzzer_process()
-        libxml_proc_data = Process(libxml_proc_popen)
-        libxml_proc_data.start_monitoring()
-        logging.debug('Started libxml fuzzer process with pid: [%d]', libxml_proc_popen.pid)
+        proc_popen = start_fuzzer_process()
+        proc_data = Process(proc_popen)
+        proc_data.start_monitoring()
+        logging.debug('Started fuzzer process with pid: [%d]', proc_popen.pid)
 
         cycles += 1
         time.sleep(2)
-        perf_command = ['perf', 'record', '-g', '-b', '-p', str(libxml_proc_popen.pid)]
+        perf_command = ['perf', 'record', '-g', '-b', '-p', str(proc_popen.pid)]
         logging.debug('Start perf sampling command:\n\t%s', ' '.join(perf_command))
         perf_proc = subprocess.Popen(perf_command, stdout=logfile_handler)
         time.sleep(running_setup['sampling_time'])
@@ -220,8 +241,8 @@ def main(clean=False, full=False):
         logging.debug('Killed perf process with pid:[%d]', perf_proc.pid)
         time.sleep(5)
 
-        #rebuild libxml
-        perf_to_gcov_command = ['create_llvm_prof', '--binary=' + libxml_exec,
+        #rebuild
+        perf_to_gcov_command = ['create_llvm_prof', '--binary=' + exec_file[running_setup['sw']],
                 '--profile=perf.data', '--out=perf.llvm_prof']
         logging.debug('Running perf to gcov command:\n\t%s', ' '.join(perf_to_gcov_command))
         subprocess.check_call(perf_to_gcov_command, stdout=logfile_handler)
@@ -229,9 +250,9 @@ def main(clean=False, full=False):
         focused_build(cflags=focused_cflags, ldflags=focused_ldflags, ranlib=focused_ranlib)
         link_fuzzer()
 
-        libxml_proc_data.terminate()
+        proc_data.terminate()
         try:
-            os.kill(libxml_proc_data.pid, signal.SIGINT)
+            os.kill(proc_data.pid, signal.SIGINT)
         except ProcessLookupError:
             pass
         time.sleep(1)
@@ -256,7 +277,7 @@ class Process():
                 self.pid = self.popen.pid
                 self.original_popen.pid = self.pid
                 self.running = True
-                logging.debug('Restarted libxml process with new pid [%s]', self.pid)
+                logging.debug('Restarted process with new pid [%s]', self.pid)
             time.sleep(3)
 
     def start_monitoring(self):
@@ -264,7 +285,7 @@ class Process():
 
     def terminate(self):
         self.should_run = False
-        logging.debug('The libxml process with pid [%s] exited', self.pid)
+        logging.debug('The process with pid [%s] exited', self.pid)
         self.crash_thread.join()
 
 def get_arg(param):
@@ -280,15 +301,17 @@ if __name__ == "__main__":
     parser.add_argument('--sampling-time', default=20)
     parser.add_argument('--max-len', default=2000)
     parser.add_argument('--seed', default=0)
+    parser.add_argument('--max_total_time', default=20)
     parser.add_argument('--asap-cost-threshold', default=1000)
     parser.add_argument('--clean', action='store_true')
     parser.add_argument('--full', action='store_true')
+    parser.add_argument('--sw', default='libxml')
     res = vars(parser.parse_args(sys.argv[1:]))
 
     if res['command'] == 'clean':
         try:
             subprocess.check_call(['rm', '-r', 'CORPUS'] + \
-                    file_pattern('.', '*.o') + [libxml_exec, 'libFuzzer.a'])
+                    file_pattern('.', '*.o') + [exec_file[res['sw']], 'libFuzzer.a'])
         except subprocess.CalledProcessError as e:
             print(e)
         exit()
@@ -297,11 +320,15 @@ if __name__ == "__main__":
     running_setup['sampling_time'] = int(res['sampling_time'])
     running_setup['max_len'] = int(res['max_len'])
     running_setup['seed'] = int(res['seed'])
+    running_setup['max_total_time'] = int(res['max_total_time'])
     running_setup['asap_cost_threshold'] = int(res['asap_cost_threshold'])
+    running_setup['sw'] = res['sw']
 
-    build_dir = 'libxmlfuzzer-asap-%d-build' % running_setup['asap_cost_threshold']
+    build_dir = 'fuzzer-asap-%d-build' % running_setup['asap_cost_threshold']
     if not os.path.isdir(build_dir):
         os.mkdir(build_dir)
+
+    target_fuzzer = os.path.join(os.getcwd(), source_file[running_setup['sw']])
     os.chdir(build_dir)
 
     logfile_handler = open(logfile, 'w')
@@ -312,18 +339,25 @@ if __name__ == "__main__":
     pwd = os.getcwd()
     prefix = os.path.join(pwd, 'inst')
 
+    cov_flags = "-fsanitize-coverage=edge,indirect-calls,8bit-counters"
+    basic_cflags = ['-O2', '-g', '-fsanitize=address', cov_flags]
+
     focused_cflags = basic_cflags + ['-fprofile-sample-use=' +
         os.path.join(os.getcwd(), llvm_prof_path), '-B/usr/bin/ld.gold',
         '-fsanitize=asap', '-mllvm', '-asap-cost-threshold=' + str(running_setup['asap_cost_threshold'])]
+
+    focused_ldflags = ['-B/usr/bin/ld.gold']
+    focused_ranlib = ['llvm-ranlib']
+
+    include_dir = {'libxml':os.path.join(prefix, 'include/libxml2'),
+            'pcre':os.path.join(prefix, 'include'),
+            'http_parser':os.path.join(prefix, 'include')}
     build_fuzzer_cmd = ['clang++', '-g'] + basic_cflags + ['-c', '-std=c++11',
-        '-I' + prefix + '/include/libxml2', libxml_target_fuzzer]
+        '-I' + include_dir[running_setup['sw']], target_fuzzer]
 
-    link_fuzzer_cmd = ['clang++', '-B/usr/bin/ld.gold', '-fsanitize=address', cov_flags,
-            '-o', libxml_exec,
-            libxml_obj,
-            os.path.join(prefix, 'lib', 'libxml2.a'),
-            'libFuzzer.a']
-
+    lib_path = {'libxml':os.path.join(prefix, 'lib/libxml2.a'),
+            'pcre':os.path.join(prefix, 'lib/libpcre2-8.a'),
+            'http_parser':os.path.join(prefix, 'lib/libhttp_parser.so')}
 
     logging.info('Running focused fuzzer with the following parameters:\n\t' +
             'corpus path:[%s] sampling_time:[%d] max_len:[%d] ' +
