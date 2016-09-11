@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -o pipefail
 
 SCRIPT_DIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
 . "$SCRIPT_DIR/ff-common.sh"
@@ -19,9 +20,12 @@ build_target_and_fuzzer() {
   if ! [ -d "target-${name}-build" ]; then
     mkdir "target-${name}-build"
     cd "target-${name}-build"
-    "$CC" $HTTP_PARSER_CFLAGS $ASAN_CFLAGS $extra_cflags -I ../http-parser-src -c ../http-parser-src/http_parser.c -o http_parser.o
-    "$CC" $ASAN_CFLAGS $extra_cflags -I ../http-parser-src -c "$SCRIPT_DIR/ff-http-parser.c" -o ff-http-parser.o
-    "$CXX" $ASAN_LDFLAGS ff-http-parser.o http_parser.o "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer
+    "$CC" $HTTP_PARSER_CFLAGS $ASAN_CFLAGS $extra_cflags -I ../http-parser-src -c ../http-parser-src/http_parser.c \
+      -o http_parser.o 2>&1 | tee "../logs/build-${name}.log"
+    "$CC" $ASAN_CFLAGS $extra_cflags -I ../http-parser-src -c "$SCRIPT_DIR/ff-http-parser.c" \
+      -o ff-http-parser.o 2>&1 | tee -a "../logs/build-${name}.log"
+    "$CXX" $ASAN_LDFLAGS ff-http-parser.o http_parser.o "$WORK_DIR/Fuzzer-build/libFuzzer.a" \
+      -o fuzzer 2>&1 | tee -a "../logs/build-${name}.log"
     cd ..
   fi
 }

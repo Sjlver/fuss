@@ -12,6 +12,7 @@ class BasicBlock;
 class BranchInst;
 class CallInst;
 class Instruction;
+class Function;
 class LLVMContext;
 class raw_ostream;
 }
@@ -39,6 +40,9 @@ llvm::DebugLoc getBasicBlockDebugLoc(llvm::BasicBlock *BB);
 
 // Returns the debug location for a piece of instrumentation.
 llvm::DebugLoc getInstrumentationDebugLoc(llvm::Instruction *Inst);
+
+// Returns the debug location for the given function.
+llvm::DebugLoc getFunctionDebugLoc(const llvm::Function &F);
 
 void printDebugLoc(const llvm::DebugLoc &DbgLoc, llvm::LLVMContext &Ctx,
                    llvm::raw_ostream &Outs);

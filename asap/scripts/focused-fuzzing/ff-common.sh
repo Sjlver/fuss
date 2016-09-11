@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -o pipefail
 
 SCRIPT_DIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
 
@@ -28,7 +29,7 @@ CC="$(which clang)"
 CXX="$(which clang++)"
 
 WORK_DIR="$(pwd)"
-N_CORES=$(getconf _NPROCESSORS_ONLN)
+N_CORES=${N_CORES:-$(getconf _NPROCESSORS_ONLN)}
 
 # Set ASAN_OPTIONS to defaults that favor speed over nice output
 export ASAN_OPTIONS="malloc_context_size=0"
@@ -38,7 +39,7 @@ FUZZER_TESTING_SECONDS=20
 FUZZER_PROFILING_SECONDS=20
 
 # Which thresholds should we test?
-THRESHOLDS="5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1"
+THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1}"
 
 # Download and build LLVM's libFuzzer
 init_libfuzzer() {
@@ -119,7 +120,7 @@ build_and_test_all() {
 
   # Build and test various cost thresholds
   for threshold in $THRESHOLDS; do
-    build_target_and_fuzzer "asap-$threshold" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=$threshold"
+    build_target_and_fuzzer "asap-$threshold" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose"
     test_fuzzer "asap-$threshold"
     compute_coverage "asap-$threshold"
   done

@@ -25,9 +25,9 @@ static cl::opt<unsigned long long>
                   cl::init((unsigned long long)(-1)));
 
 static cl::opt<bool>
-    PrintRemovedChecks("print-removed-checks",
-                       cl::desc("Should a list of removed checks be printed?"),
-                       cl::init(false));
+    AsapVerbose("asap-verbose",
+                cl::desc("Print a list of checks with their costs"),
+                cl::init(false));
 
 bool AsapPass::runOnFunction(Function &F) {
   SCC = &getAnalysis<SanityCheckSampledCost>();
@@ -40,10 +40,13 @@ bool AsapPass::runOnFunction(Function &F) {
 
   size_t TotalChecks = SCC->getCheckCosts().size();
   if (TotalChecks == 0) {
-    if (PrintRemovedChecks) {
-      dbgs() << "AsapPass on " << F.getName() << "\n";
-      dbgs() << "Removed 0 out of 0 static checks (nan%)\n";
-      dbgs() << "Removed 0 out of 0 dynamic checks (nan%)\n";
+    if (AsapVerbose) {
+      dbgs() << "AsapPass: ran on " << F.getName() << " at ";
+      DebugLoc DL = getFunctionDebugLoc(F);
+      printDebugLoc(DL, F.getContext(), dbgs());
+      dbgs() << "\n";
+      dbgs() << "  Static checks: total 0, removed 0, kept 0, sanity level nan%\n";
+      dbgs() << "  Cost: total 0, removed 0, kept 0, cost level nan%\n";
     }
     return false;
   }
@@ -58,28 +61,33 @@ bool AsapPass::runOnFunction(Function &F) {
   uint64_t RemovedCost = 0;
   size_t NChecksRemoved = 0;
   for (const SanityCheckSampledCost::CheckCost &I : SCC->getCheckCosts()) {
-    if (I.second < CostThreshold) {
-      break;
-    }
-
-    if (optimizeCheckAway(I.first)) {
-      RemovedCost += I.second;
-      NChecksRemoved += 1;
+    if (I.second >= CostThreshold) {
+      if (optimizeCheckAway(I.first)) {
+        RemovedCost += I.second;
+        NChecksRemoved += 1;
+      }
+    } else {
+      if (AsapVerbose) {
+        logSanityCheck(I.first, "keeping", dbgs());
+      }
     }
   }
 
-  if (PrintRemovedChecks) {
-    dbgs() << "AsapPass on " << F.getName() << "\n";
-    dbgs() << "Removed " << NChecksRemoved << " out of " << TotalChecks
-           << " static checks ("
-           << format("%0.2f", (100.0 * NChecksRemoved / TotalChecks)) << "%)\n";
+  if (AsapVerbose) {
+    dbgs() << "AsapPass: ran on " << F.getName() << " at ";
+    DebugLoc DL = getFunctionDebugLoc(F);
+    printDebugLoc(DL, F.getContext(), dbgs());
+    dbgs() << "\n";
+    dbgs() << "  Static checks: total " << TotalChecks << ", removed "
+           << NChecksRemoved << ", kept " << (TotalChecks - NChecksRemoved)
+           << ", sanity level "
+           << format("%0.2f", 100.0 - 100.0 * NChecksRemoved / TotalChecks) << "%\n";
     if (TotalCost == 0) {
-      dbgs() << "Removed " << RemovedCost << " out of " << TotalCost
-             << " dynamic checks (nan%)\n";
+      dbgs() << "  Cost: total 0, removed 0, kept 0, cost level nan%\n";
     } else {
-      dbgs() << "Removed " << RemovedCost << " out of " << TotalCost
-             << " dynamic checks ("
-             << format("%0.2f", (100.0 * RemovedCost / TotalCost)) << "%)\n";
+      dbgs() << "  Cost: total " << TotalCost << ", removed " << RemovedCost
+             << ", kept " << (TotalCost - RemovedCost) << ", cost level "
+             << format("%0.2f", 100.0 - 100.0 * RemovedCost / TotalCost) << "%\n";
     }
   }
   return false;
@@ -92,24 +100,8 @@ void AsapPass::getAnalysisUsage(AnalysisUsage &AU) const {
 
 // Tries to remove a sanity check; returns true if it worked.
 bool AsapPass::optimizeCheckAway(llvm::Instruction *Inst) {
-  if (PrintRemovedChecks) {
-    DebugLoc DL = getInstrumentationDebugLoc(Inst);
-    printDebugLoc(DL, Inst->getContext(), dbgs());
-    dbgs() << ": SanityCheck with cost ";
-    dbgs() << *Inst->getMetadata("cost")->getOperand(0);
-
-    if (DL) {
-      if (MDNode *IA = DL.getInlinedAt()) {
-        dbgs() << " (inlined at ";
-        printDebugLoc(DebugLoc(IA), Inst->getContext(), dbgs());
-        dbgs() << ")";
-      }
-    }
-
-    if (auto *CI = dyn_cast<CallInst>(Inst)) {
-      dbgs() << " " << CI->getCalledFunction()->getName();
-    }
-    dbgs() << "\n";
+  if (AsapVerbose) {
+    logSanityCheck(Inst, "removing", dbgs());
   }
 
   // We'd like to simply remove the check root, and let dead code elimination
@@ -132,6 +124,27 @@ bool AsapPass::optimizeCheckAway(llvm::Instruction *Inst) {
   assert(Inst->use_empty() && "Sanity check is being used?");
   Inst->eraseFromParent();
   return true;
+}
+
+void AsapPass::logSanityCheck(Instruction *Inst, StringRef Action,
+                              raw_ostream &Outs) const {
+  DebugLoc DL = getInstrumentationDebugLoc(Inst);
+  printDebugLoc(DL, Inst->getContext(), Outs);
+  Outs << ": " << Action << " sanity check with cost "
+       << *Inst->getMetadata("cost")->getOperand(0);
+
+  if (DL) {
+    if (MDNode *IA = DL.getInlinedAt()) {
+      Outs << " (inlined at ";
+      printDebugLoc(DebugLoc(IA), Inst->getContext(), Outs);
+      Outs << ")";
+    }
+  }
+
+  if (auto *CI = dyn_cast<CallInst>(Inst)) {
+    Outs << " " << CI->getCalledFunction()->getName();
+  }
+  Outs << "\n";
 }
 
 FunctionPass *createAsapPass() {

@@ -184,6 +184,11 @@ DebugLoc getInstrumentationDebugLoc(Instruction *Inst) {
   return DebugLoc();
 }
 
+DebugLoc getFunctionDebugLoc(const Function &F) {
+  auto SP = F.getSubprogram();
+  return DebugLoc::get(SP->getScopeLine(), 0, SP);
+}
+
 void printDebugLoc(const DebugLoc &DbgLoc, LLVMContext &Ctx,
                    raw_ostream &Outs) {
   if (!DbgLoc) {

@@ -27,6 +27,10 @@ private:
 
   // Tries to remove a sanity check; returns true if it worked.
   bool optimizeCheckAway(llvm::Instruction *Inst);
+
+  // Writes information about a sanity check to the given stream.
+  void logSanityCheck(llvm::Instruction *Inst, llvm::StringRef Action,
+                      llvm::raw_ostream &Outs) const;
 };
 
 llvm::FunctionPass *createAsapPass();

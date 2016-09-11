@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -o pipefail
 
 SCRIPT_DIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
 . "$SCRIPT_DIR/ff-common.sh"
@@ -19,7 +20,7 @@ build_target_and_fuzzer() {
     mkdir "target-${name}-build"
     cd "target-${name}-build"
     CC="$CC" CXX="$CXX" CFLAGS="$ASAN_CFLAGS $extra_cflags" LDFLAGS="$ASAN_LDFLAGS" ../pcre2-10.20/configure --disable-shared
-    make -j $N_CORES V=1 libpcre2-posix.la libpcre2-8.la
+    make -j $N_CORES V=1 libpcre2-posix.la libpcre2-8.la 2>&1 | tee "../logs/build-${name}.log"
 
     "$CXX" $ASAN_CFLAGS -std=c++11 \
       -I "$WORK_DIR/target-${name}-build/src" -I "$WORK_DIR/pcre2-10.20/src" \
