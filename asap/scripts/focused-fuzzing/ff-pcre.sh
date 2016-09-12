@@ -22,7 +22,7 @@ build_target_and_fuzzer() {
     CC="$CC" CXX="$CXX" CFLAGS="$ASAN_CFLAGS $extra_cflags" LDFLAGS="$ASAN_LDFLAGS" ../pcre2-10.20/configure --disable-shared
     make -j $N_CORES V=1 libpcre2-posix.la libpcre2-8.la 2>&1 | tee "../logs/build-${name}.log"
 
-    "$CXX" $ASAN_CFLAGS -std=c++11 \
+    "$CXX" $ASAN_CFLAGS $extra_cflags -std=c++11 \
       -I "$WORK_DIR/target-${name}-build/src" -I "$WORK_DIR/pcre2-10.20/src" \
       -c "$SCRIPT_DIR/ff-pcre.cc"
     "$CXX" $ASAN_LDFLAGS ff-pcre.o \
