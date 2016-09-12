@@ -1,0 +1,45 @@
+#!/bin/bash
+
+set -e
+set -o pipefail
+
+SCRIPT_DIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
+. "$SCRIPT_DIR/ff-common.sh"
+
+if ! [ -d unrtf-0.21.9 ]; then
+  wget https://www.gnu.org/software/unrtf/unrtf-0.21.9.tar.gz
+  tar xf unrtf-0.21.9.tar.gz
+
+  cd unrtf-0.21.9
+  make distclean
+
+  cd config
+  most_recent_automake="$(ls -d1 /usr/share/automake-* | tail -n1)"
+  for i in *; do rm "$i"; ln -s "$most_recent_automake/$i"; done
+  cd ../..
+fi
+
+# Build "file" with the given `name` and `extra_cflags`.
+build_target_and_fuzzer() {
+  local name="$1"
+  local extra_cflags="$2"
+
+  if ! [ -d "target-${name}-build" ]; then
+    mkdir "target-${name}-build"
+    cd "target-${name}-build"
+    CC="$CC" CXX="$CXX" CFLAGS="$ASAN_CFLAGS $extra_cflags" LDFLAGS="$ASAN_LDFLAGS" ../unrtf-0.21.9/configure \
+      --disable-silent-rules --disable-dependency-tracking
+    make -j $N_CORES V=1 2>&1 | tee "../logs/build-${name}.log"
+
+    "$CXX" $ASAN_CFLAGS $extra_cflags -std=c++11 \
+      -DHAVE_CONFIG_H -I src -I"$WORK_DIR/unrtf-0.21.9/src" \
+      -c "$SCRIPT_DIR/ff-unrtf.cc"
+      "$CXX" $ASAN_LDFLAGS ff-unrtf.o $(ls -1 src/*.o | grep -v main.o) \
+      "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer
+    cd ..
+  fi
+}
+
+init_libfuzzer
+build_and_test_all
+print_summary
