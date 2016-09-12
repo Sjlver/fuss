@@ -6,10 +6,19 @@ set -o pipefail
 SCRIPT_DIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
 . "$SCRIPT_DIR/ff-common.sh"
 
+LIBXML_CONFIGURE_ARGS="
+      --enable-option-checking
+      --disable-shared --disable-ipv6
+      --without-c14n --without-catalog --without-debug --without-docbook --without-ftp --without-http
+      --without-legacy --without-output --without-pattern --without-push --without-python
+      --without-reader --without-readline --without-regexps --without-sax1 --without-schemas
+      --without-schematron --without-threads --without-valid --without-writer --without-xinclude
+      --without-xpath --without-xptr --with-zlib=no --with-lzma=no"
+
 if ! [ -d libxml2-src ]; then
   git clone git://git.gnome.org/libxml2 libxml2-src
   (cd libxml2-src && git checkout -b old 3a76bfeddeac9c331f761e45db6379c36c8876c3)
-  (cd libxml2-src && ./autogen.sh && make distclean)
+  (cd libxml2-src && autoreconf -fiv)
 fi
 
 # Build libxml with the given `name` and `extra_cflags`.
@@ -20,14 +29,7 @@ build_target_and_fuzzer() {
   if ! [ -d "target-${name}-build" ]; then
     mkdir "target-${name}-build"
     cd "target-${name}-build"
-    CC="$CC" CXX="$CXX" CFLAGS="$ASAN_CFLAGS $extra_cflags" LDFLAGS="$ASAN_LDFLAGS" ../libxml2-src/configure \
-      --enable-option-checking \
-      --disable-shared --disable-ipv6 \
-      --without-c14n --without-catalog --without-debug --without-docbook --without-ftp --without-http \
-      --without-legacy --without-output --without-pattern --without-push --without-python \
-      --without-reader --without-readline --without-regexps --without-sax1 --without-schemas \
-      --without-schematron --without-threads --without-valid --without-writer --without-xinclude \
-      --without-xpath --without-xptr --without-zlib --without-lzma
+    CC="$CC" CXX="$CXX" CFLAGS="$ASAN_CFLAGS $extra_cflags" LDFLAGS="$ASAN_LDFLAGS" ../libxml2-src/configure $LIBXML_CONFIGURE_ARGS
     make -j $N_CORES V=1 libxml2.la include/libxml/xmlversion.h 2>&1 | tee "../logs/build-${name}.log"
 
     "$CXX" $ASAN_CFLAGS $extra_cflags -std=c++11 \
