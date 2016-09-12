@@ -37,9 +37,11 @@ Obtaining and Compiling ASAP
 2. On Linux, compiling ASAP also depends on binutils development files, since
    we need to build the LLVM Gold linker plugin:
 
-        sudo aptitude install binutils-dev
+        sudo apt install binutils-dev
 
 3. Compile ASAP:
+
+        sudo apt install cmake ninja-build
 
         cd $ASAP_DIR
         mkdir build
@@ -57,6 +59,25 @@ Obtaining and Compiling ASAP
 
    On Linux, add `-DLLVM_BINUTILS_INCDIR=/usr/include` to the cmake command
    line.
+
+4. Install Perf and AutoFDO. If you want to use ASAP's sampling profiler, you
+   need Linux Perf and AutoFDO:
+
+      # perf
+      sudo apt install linux-tools-generic
+
+      # autofdo
+      sudo apt install libssl-dev
+      cd $ASAP_DIR
+      git clone git@github.com:google/autofdo.git
+      cd autofdo
+      git checkout a2f8106ca91ce24ccb39bce9a72a320f4f9a4b66
+      ./configure
+      make -j $(getconf _NPROCESSORS_ONLN)
+
+5. Set your PATH to use ASAP
+
+      export PATH=$ASAP_DIR/build/bin:$ASAP_DIR/autofdo:$PATH
 
 
 Trying ASAP on a small example
