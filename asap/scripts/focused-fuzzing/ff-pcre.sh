@@ -1,15 +1,9 @@
-#!/bin/bash
-
-set -e
-set -o pipefail
-
-SCRIPT_DIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
-. "$SCRIPT_DIR/ff-common.sh"
-
-if ! [ -d pcre2-10.20 ]; then
-  wget ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre/pcre2-10.20.tar.gz
-  tar xf pcre2-10.20.tar.gz
-fi
+init_target() {
+  if ! [ -d pcre2-10.20 ]; then
+    wget ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre/pcre2-10.20.tar.gz
+    tar xf pcre2-10.20.tar.gz
+  fi
+}
 
 # Build pcre2 with the given `name` and `extra_cflags`.
 build_target_and_fuzzer() {
@@ -37,7 +31,3 @@ build_target_and_fuzzer() {
     cd ..
   fi
 }
-
-init_libfuzzer
-build_and_test_all
-print_summary

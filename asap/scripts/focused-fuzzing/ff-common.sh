@@ -5,14 +5,6 @@ set -o pipefail
 
 SCRIPT_DIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
 
-if [ "$1" = "clean" ]; then
-  rm -rf *-build logs perf-data
-  exit 0
-fi
-
-mkdir -p logs
-mkdir -p perf-data
-
 if ! clang --version | grep -q asap; then
   echo "Could not find ASAP's clang. Please set \$PATH correctly." >&2
   exit 1
@@ -32,6 +24,7 @@ CXX="$(which clang++)"
 
 WORK_DIR="$(pwd)"
 N_CORES=${N_CORES:-$(getconf _NPROCESSORS_ONLN)}
+MAX_LEN=${MAX_LEN:-128}
 
 # Set ASAN_OPTIONS to defaults that favor speed over nice output
 export ASAN_OPTIONS="malloc_context_size=0"
@@ -45,6 +38,9 @@ THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1}"
 
 # Download and build LLVM's libFuzzer
 init_libfuzzer() {
+  mkdir -p logs
+  mkdir -p perf-data
+
   if ! [ -d Fuzzer-src ]; then
     git clone https://chromium.googlesource.com/chromium/llvm-project/llvm/lib/Fuzzer Fuzzer-src
     (cd Fuzzer-src && git checkout -b release_37 d3439464cf111bb0404754058f3632fd95639da7)
@@ -102,6 +98,7 @@ compute_coverage() {
   fi
 }
 
+# Generate and test initial, pgo, and thresholded versions
 build_and_test_all() {
   # Initial build; simply AddressSanitizer, no PGO, no ASAP.
   build_target_and_fuzzer "asan" ""
@@ -154,4 +151,78 @@ print_summary() {
       echo -e "$name\t$cov\t$bits\t$execs\t$execs_per_sec\t$units\t$actual_cov\t$actual_bits"
     done
   ) | tee logs/summary.log
+}
+
+# usage: print usage information
+usage() {
+  echo "ff.sh: Focused Fuzzing wrapper script"
+  echo "usage: ff.sh command [command args]"
+  echo "commands:"
+  echo "  clean   - remove generated files"
+  echo "  help    - show this help message"
+  echo "  build   - build initial, pgo, and thresholded versions"
+  echo "  longrun - build and then run a target for a long time"
+}
+
+# clean: Remove generated files
+do_clean() {
+  rm -rf *-build logs perf-data
+}
+
+# build: build initial, pgo, and thresholded versions
+do_build() {
+  init_target
+  init_libfuzzer
+  build_and_test_all
+  print_summary
+}
+
+# longrun: build and then run a target for a long time
+do_longrun() {
+  GLOBAL_CORPUS="${GLOBAL_CORPUS:-$HOME/asap/fuzzing-corpora/$target}"
+  if ! [ -d "$GLOBAL_CORPUS" ]; then
+    echo "Please set \$GLOBAL_CORPUS." >&2
+    echo "Try:" >&2
+    echo "    export GLOBAL_CORPUS=\"$GLOBAL_CORPUS\"" >&2
+    echo "    git clone git@github.com:dslab-epfl/fuzzing-corpora.git \"$GLOBAL_CORPUS\"" >&2
+    exit 1
+  fi
+
+  init_target
+  init_libfuzzer
+  build_target_and_fuzzer "asan" ""
+  profile_fuzzer "asan" "-b"
+
+  local threshold=200
+  build_target_and_fuzzer "asap-$threshold" \
+    "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof \
+    -fsanitize=asap -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose"
+
+  # Profile this fuzzer for a bit longer than usual.
+  # Note: we're not using any delay, because sometimes these fuzzers exit
+  # fairly quickly when they find a crash...
+  # TODO: it would be cool to profile using the full corpus, and to fix this
+  # crash-early issue.
+  mkdir -p "target-asap-${threshold}-build/CORPUS"
+  FUZZER_PROFILING_SECONDS=60 profile_fuzzer "asap-$threshold" "-b"
+
+  # Rebuild a high-quality fuzzer.
+  # Note that because we profiled during 60 seconds instead of the default 20,
+  # we set the threshold a bit higher, to 500. This is science we're doing :)
+  local longrun_threshold=500
+  build_target_and_fuzzer "longrun-$longrun_threshold" \
+    "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asap-${threshold}.llvm_prof \
+    -fsanitize=asap -mllvm -asap-cost-threshold=$longrun_threshold -mllvm -asap-verbose"
+  
+  # And let the long-running fuzzer run.
+  local workers=
+  if [ -n "$N_WORKERS" ]; then
+    workers="-workers=$N_WORKERS"
+  fi
+  cd "target-longrun-${longrun_threshold}-build"
+  mkdir -p "CORPUS"
+  "./fuzzer" \
+    -jobs=1000 $workers -print_final_stats=1 -max_len=$MAX_LEN \
+    "CORPUS" "$GLOBAL_CORPUS"
+  cd ..
 }

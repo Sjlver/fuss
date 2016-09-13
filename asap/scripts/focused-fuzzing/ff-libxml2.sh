@@ -1,11 +1,3 @@
-#!/bin/bash
-
-set -e
-set -o pipefail
-
-SCRIPT_DIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
-. "$SCRIPT_DIR/ff-common.sh"
-
 LIBXML_CONFIGURE_ARGS="
       --enable-option-checking
       --disable-shared --disable-ipv6
@@ -15,15 +7,17 @@ LIBXML_CONFIGURE_ARGS="
       --without-schematron --without-threads --without-valid --without-writer --without-xinclude
       --without-xpath --without-xptr --with-zlib=no --with-lzma=no"
 
-if ! [ -d libxml2-src ]; then
-  git clone git://git.gnome.org/libxml2 libxml2-src
-  (
-    cd libxml2-src
-    git checkout -b old 3a76bfeddeac9c331f761e45db6379c36c8876c3
-    git am "$SCRIPT_DIR/ff-libxml2.patch"
-    autoreconf -fiv
-  )
-fi
+init_target() {
+  if ! [ -d libxml2-src ]; then
+    git clone git://git.gnome.org/libxml2 libxml2-src
+    (
+      cd libxml2-src
+      git checkout -b old 3a76bfeddeac9c331f761e45db6379c36c8876c3
+      git am "$SCRIPT_DIR/ff-libxml2.patch"
+      autoreconf -fiv
+    )
+  fi
+}
 
 # Build libxml with the given `name` and `extra_cflags`.
 build_target_and_fuzzer() {
@@ -44,7 +38,3 @@ build_target_and_fuzzer() {
     cd ..
   fi
 }
-
-init_libfuzzer
-build_and_test_all
-print_summary

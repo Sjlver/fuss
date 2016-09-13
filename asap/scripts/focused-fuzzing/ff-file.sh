@@ -1,15 +1,10 @@
-#!/bin/bash
-
-set -e
-set -o pipefail
-
-SCRIPT_DIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
-. "$SCRIPT_DIR/ff-common.sh"
-
-if ! [ -d file ]; then
-  git clone git@github.com:file/file.git
-  (cd file && autoreconf -f -i)
-fi
+# Initialize the "file" source code
+init_target() {
+  if ! [ -d file ]; then
+    git clone https://github.com/file/file.git
+    (cd file && autoreconf -f -i)
+  fi
+}
 
 # Build "file" with the given `name` and `extra_cflags`.
 build_target_and_fuzzer() {
@@ -33,7 +28,3 @@ build_target_and_fuzzer() {
     cd ..
   fi
 }
-
-init_libfuzzer
-build_and_test_all
-print_summary

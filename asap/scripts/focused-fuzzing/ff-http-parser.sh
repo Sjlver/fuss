@@ -1,16 +1,9 @@
-#!/bin/bash
-
-set -e
-set -o pipefail
-
-SCRIPT_DIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
-. "$SCRIPT_DIR/ff-common.sh"
-
-HTTP_PARSER_CFLAGS="-DHTTP_PARSER_STRICT=0 -Wextra -Werror -Wno-unused-parameter"
-
-if ! [ -d http-parser-src ]; then
-  git clone git@github.com:nodejs/http-parser.git http-parser-src
-fi
+# Init http-parser source code
+init_target() {
+  if ! [ -d http-parser-src ]; then
+    git clone git@github.com:nodejs/http-parser.git http-parser-src
+  fi
+}
 
 # Build http-parser with the given `name` and `extra_cflags`.
 build_target_and_fuzzer() {
@@ -29,7 +22,3 @@ build_target_and_fuzzer() {
     cd ..
   fi
 }
-
-init_libfuzzer
-build_and_test_all
-print_summary

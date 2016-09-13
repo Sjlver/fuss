@@ -1,24 +1,18 @@
-#!/bin/bash
+init_target() {
+  if ! [ -d unrtf-0.21.9 ]; then
+    wget https://www.gnu.org/software/unrtf/unrtf-0.21.9.tar.gz
+    tar xf unrtf-0.21.9.tar.gz
 
-set -e
-set -o pipefail
+    cd unrtf-0.21.9
+    patch -p1 < "$SCRIPT_DIR/ff-unrtf.patch"
+    make distclean
 
-SCRIPT_DIR="$( dirname "$( readlink -f "${BASH_SOURCE[0]}" )" )"
-. "$SCRIPT_DIR/ff-common.sh"
-
-if ! [ -d unrtf-0.21.9 ]; then
-  wget https://www.gnu.org/software/unrtf/unrtf-0.21.9.tar.gz
-  tar xf unrtf-0.21.9.tar.gz
-
-  cd unrtf-0.21.9
-  patch -p1 < "$SCRIPT_DIR/ff-unrtf.patch"
-  make distclean
-
-  cd config
-  most_recent_automake="$(ls -d1 /usr/share/automake-* | tail -n1)"
-  for i in *; do rm "$i"; ln -s "$most_recent_automake/$i"; done
-  cd ../..
-fi
+    cd config
+    most_recent_automake="$(ls -d1 /usr/share/automake-* | tail -n1)"
+    for i in *; do rm "$i"; ln -s "$most_recent_automake/$i"; done
+    cd ../..
+  fi
+}
 
 # Build "file" with the given `name` and `extra_cflags`.
 build_target_and_fuzzer() {
@@ -40,7 +34,3 @@ build_target_and_fuzzer() {
     cd ..
   fi
 }
-
-init_libfuzzer
-build_and_test_all
-print_summary
