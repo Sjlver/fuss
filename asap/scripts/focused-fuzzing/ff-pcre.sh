@@ -19,7 +19,12 @@ build_target_and_fuzzer() {
   if ! [ -d "target-${name}-build" ]; then
     mkdir "target-${name}-build"
     cd "target-${name}-build"
-    CC="$CC" CXX="$CXX" CFLAGS="$ASAN_CFLAGS $extra_cflags" LDFLAGS="$ASAN_LDFLAGS" ../pcre2-10.20/configure --disable-shared
+
+    # Configure pcre2 with relatively low resource limits, to ensure fuzzing is
+    # fast, and to avoid false positives from AddressSanitizer's low stack
+    # overflow limits.
+    CC="$CC" CXX="$CXX" CFLAGS="$ASAN_CFLAGS $extra_cflags" LDFLAGS="$ASAN_LDFLAGS" ../pcre2-10.20/configure \
+      --disable-shared --with-parens-nest-limit=200 --with-match-limit=1000000 --with-match-limit-recursion=200
     make -j $N_CORES V=1 libpcre2-posix.la libpcre2-8.la 2>&1 | tee "../logs/build-${name}.log"
 
     "$CXX" $ASAN_CFLAGS $extra_cflags -std=c++11 \
