@@ -1,0 +1,18 @@
+diff -Nur unrtf-0.21.9/src/error.c unrtf-0.21.9-patched/src/error.c
+--- unrtf-0.21.9/src/error.c	2014-12-14 13:32:31.579829668 +0000
++++ unrtf-0.21.9-patched/src/error.c	2016-09-13 10:45:55.218939726 +0000
+@@ -87,7 +87,14 @@
+ #else
+ 	fprintf(stderr, "Error: %s\n", message);
+ #endif
++#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
++	// Change to abort, so that fuzzers will treat this as an error. Note that
++	// if the program `exit`s, AddressSanitizer will report memory leaks
++	// because unrtf does not release memory on the error path.
++	abort();
++#else
+ 	exit(10);
++#endif
+ }
+ 
+ 

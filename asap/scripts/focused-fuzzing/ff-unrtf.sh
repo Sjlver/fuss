@@ -11,6 +11,7 @@ if ! [ -d unrtf-0.21.9 ]; then
   tar xf unrtf-0.21.9.tar.gz
 
   cd unrtf-0.21.9
+  patch -p1 < "$SCRIPT_DIR/ff-unrtf.patch"
   make distclean
 
   cd config

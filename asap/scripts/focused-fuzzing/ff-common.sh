@@ -23,7 +23,9 @@ if ! which create_llvm_prof >/dev/null 2>&1; then
 fi
 
 LIBFUZZER_CFLAGS="-O3 -g -Wall -std=c++11"
-ASAN_CFLAGS="-O3 -g -Wall -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters"
+ASAN_CFLAGS="-O3 -g -Wall \
+  -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters \
+  -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
 ASAN_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters"
 CC="$(which clang)"
 CXX="$(which clang++)"
