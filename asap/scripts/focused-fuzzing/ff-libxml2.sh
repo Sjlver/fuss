@@ -17,8 +17,12 @@ LIBXML_CONFIGURE_ARGS="
 
 if ! [ -d libxml2-src ]; then
   git clone git://git.gnome.org/libxml2 libxml2-src
-  (cd libxml2-src && git checkout -b old 3a76bfeddeac9c331f761e45db6379c36c8876c3)
-  (cd libxml2-src && autoreconf -fiv)
+  (
+    cd libxml2-src
+    git checkout -b old 3a76bfeddeac9c331f761e45db6379c36c8876c3
+    git am "$SCRIPT_DIR/ff-libxml2.patch"
+    autoreconf -fiv
+  )
 fi
 
 # Build libxml with the given `name` and `extra_cflags`.
