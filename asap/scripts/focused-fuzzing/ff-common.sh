@@ -45,7 +45,7 @@ THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1}"
 init_libfuzzer() {
   if ! [ -d Fuzzer-src ]; then
     git clone https://chromium.googlesource.com/chromium/llvm-project/llvm/lib/Fuzzer Fuzzer-src
-    (cd Fuzzer-src && git checkout -b release_37 95daeb3e343c6b64524acbeaa01b941111145c2e)
+    (cd Fuzzer-src && git checkout -b release_37 d3439464cf111bb0404754058f3632fd95639da7)
   fi
 
   if ! [ -d Fuzzer-build ]; then
