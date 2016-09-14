@@ -127,6 +127,11 @@ build_and_test_all() {
 
 # Print out a summary that we can export to spreadsheet
 print_summary() {
+  local summary_versions="$@"
+  if [ -z "$summary_versions"]; then
+    summary_versions="asan-pgo $(for i in $THRESHOLDS; do echo asap-$i; done)"
+  fi
+
   echo
   echo "Summary"
   echo "======="
@@ -134,15 +139,15 @@ print_summary() {
   (
     echo -e "name\tcov\tbits\texecs\texecs_per_sec\tunits\tactual_cov\tactual_bits"
 
-    for name in asan-pgo $(for i in $THRESHOLDS; do echo asap-$i; done); do
+    for name in $summary_versions; do
       # Get cov, bits from the last output line
-      cov="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
-      bits="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
+      cov="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*' | sort -n | tail -n1)"
+      bits="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*' | sort -n | tail -n1)"
 
       # Get units and execs/s from the final stats
-      execs="$(grep 'stat::number_of_executed_units:' logs/fuzzer-${name}.log | grep -o '[0-9]*')"
-      execs_per_sec="$(grep 'stat::average_exec_per_sec:' logs/fuzzer-${name}.log | grep -o '[0-9]*')"
-      units="$(grep 'stat::new_units_added:' logs/fuzzer-${name}.log | grep -o '[0-9]*')"
+      execs="$(grep 'stat::number_of_executed_units:' logs/fuzzer-${name}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
+      execs_per_sec="$(grep 'stat::average_exec_per_sec:' logs/fuzzer-${name}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
+      units="$(grep 'stat::new_units_added:' logs/fuzzer-${name}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
 
       # Get actual coverage from running the corpus against the PGO version
       actual_cov="$(grep '#[0-9]*.*DONE' logs/coverage-${name}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
