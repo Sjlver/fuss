@@ -44,12 +44,12 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
 
   // A list of instructions that are used by sanity checks. They become sanity
   // check instructions if it turns out they're not used by anything else.
-  SmallPtrSet<Instruction *, 128> Worklist;
+  SmallPtrSet<Instruction *, 32> Worklist;
 
   // A list of basic blocks that contain sanity check instructions. They
   // become sanity check blocks if it turns out they don't contain anything
   // else.
-  SmallPtrSet<BasicBlock *, 64> BlockWorklist;
+  SmallPtrSet<BasicBlock *, 32> BlockWorklist;
 
   // A map from instructions to the checks that use them.
   std::map<Instruction *, SmallPtrSet<Instruction *, 4>> ChecksByInstruction;
@@ -130,12 +130,12 @@ void SanityCheckInstructionsPass::findInstructions(Function *F) {
       BlockWorklist.erase(BB);
 
       if (onlyDominatesInstructionsFrom(
-              BB->begin(), SanityCheckInstructions.at(BB->getParent()), DT)) {
+              &*BB->begin(), SanityCheckInstructions.at(BB->getParent()), DT)) {
         for (User *U : BB->users()) {
           if (Instruction *Inst = dyn_cast<Instruction>(U)) {
             Worklist.insert(Inst);
             // Attribute Inst to the same check as the first instruction in BB.
-            auto CBI = ChecksByInstruction.find(BB->begin());
+            auto CBI = ChecksByInstruction.find(&*BB->begin());
             if (CBI != ChecksByInstruction.end()) {
               ChecksByInstruction[Inst].insert(CBI->second.begin(),
                                                CBI->second.end());

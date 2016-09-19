@@ -17,8 +17,8 @@ class raw_ostream;
 }
 
 // Types used to store sanity check blocks / instructions
-typedef llvm::SmallPtrSet<llvm::BasicBlock *, 64> BlockSet;
-typedef llvm::SmallPtrSet<llvm::Instruction *, 64> InstructionSet;
+typedef llvm::SmallPtrSet<llvm::BasicBlock *, 32> BlockSet;
+typedef llvm::SmallPtrSet<llvm::Instruction *, 32> InstructionSet;
 
 struct SanityCheckInstructionsPass;
 

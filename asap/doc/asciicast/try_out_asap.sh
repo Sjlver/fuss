@@ -7,9 +7,9 @@ cd asap
 # Clone the source code
 git clone https://github.com/dslab-epfl/asap.git
 git clone http://llvm.org/git/clang.git asap/tools/clang
-( cd asap/tools/clang && git checkout release_37 )
+( cd asap/tools/clang && git checkout release_39 )
 git clone http://llvm.org/git/compiler-rt.git asap/projects/compiler-rt
-( cd asap/projects/compiler-rt && git checkout release_37 )
+( cd asap/projects/compiler-rt && git checkout release_39 )
 
 # Let's build ASAP
 mkdir build
@@ -17,11 +17,10 @@ cd build
 
 # For configuring, these settings are recommended:
 # - -G Ninja finishes the build sooner (you want your build ASAP, after all :) )
+# - -DCMAKE_BUILD_TYPE=Release creates an LLVM that's about 10x faster
+#   than a debug build.
 # - -DLLVM_ENABLE_ASSERTIONS=ON makes bugs a bit easier to understand
-# - -DCMAKE_EXPORT_COMPILE_COMMANDS=ON causes a compile_commands.json
-#   file to be generated. This file is useful if you're editing the ASAP
-#   source code or running code analysis tools.
-cmake -G Ninja -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../asap
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON ../asap
 
 cmake --build .
 

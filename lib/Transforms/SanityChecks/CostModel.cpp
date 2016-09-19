@@ -35,6 +35,9 @@
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
+#define CM_NAME "cost-model"
+#define DEBUG_TYPE CM_NAME
+
 static cl::opt<bool> EnableReduxCost("sanity-check-costmodel-reduxcost",
                                      cl::init(false), cl::Hidden,
                                      cl::desc("Recognize reduction patterns."));
@@ -75,7 +78,7 @@ static bool isAlternateVectorMask(SmallVectorImpl<int> &Mask) {
 
 static TargetTransformInfo::OperandValueKind getOperandInfo(Value *V) {
   TargetTransformInfo::OperandValueKind OpInfo =
-      TargetTransformInfo::OK_AnyValue;
+    TargetTransformInfo::OK_AnyValue;
 
   // Check for a splat of a constant or for a non uniform vector of constants.
   if (isa<ConstantVector>(V) || isa<ConstantDataVector>(V)) {
@@ -104,10 +107,7 @@ static bool matchPairwiseShuffleMask(ShuffleVectorInst *SI, bool IsLeft,
     Mask[i] = val;
 
   SmallVector<int, 16> ActualMask = SI->getShuffleMask();
-  if (Mask != ActualMask)
-    return false;
-
-  return true;
+  return Mask == ActualMask;
 }
 
 static bool matchPairwiseReductionAtLevel(const BinaryOperator *BinOp,
@@ -231,7 +231,7 @@ static bool matchPairwiseReduction(const ExtractElementInst *ReduxRoot,
   //       <4 x i32> <i32 1, i32 undef, i32 undef, i32 undef>
   // %bin.rdx8 = fadd <4 x float> %rdx.shuf.1.0, %rdx.shuf.1.1
   // %r = extractelement <4 x float> %bin.rdx8, i32 0
-  if (!matchPairwiseReductionAtLevel(RdxStart, 0, Log2_32(NumVecElems)))
+  if (!matchPairwiseReductionAtLevel(RdxStart, 0,  Log2_32(NumVecElems)))
     return false;
 
   Opcode = RdxStart->getOpcode();
@@ -330,16 +330,13 @@ static bool matchVectorSplittingReduction(const ExtractElementInst *ReduxRoot,
   return true;
 }
 
-unsigned getInstructionCost(const Instruction *I,
-                            const TargetTransformInfo *TTI) {
+unsigned getInstructionCost(const Instruction *I, const TargetTransformInfo *TTI) {
   if (!TTI)
     return -1;
 
   switch (I->getOpcode()) {
-  case Instruction::GetElementPtr: {
-    Type *ValTy = I->getOperand(0)->getType()->getPointerElementType();
-    return TTI->getAddressComputationCost(ValTy);
-  }
+  case Instruction::GetElementPtr:
+    return TTI->getUserCost(I);
 
   case Instruction::Ret:
   case Instruction::PHI:
@@ -365,9 +362,9 @@ unsigned getInstructionCost(const Instruction *I,
   case Instruction::Or:
   case Instruction::Xor: {
     TargetTransformInfo::OperandValueKind Op1VK =
-        getOperandInfo(I->getOperand(0));
+      getOperandInfo(I->getOperand(0));
     TargetTransformInfo::OperandValueKind Op2VK =
-        getOperandInfo(I->getOperand(1));
+      getOperandInfo(I->getOperand(1));
     return TTI->getArithmeticInstrCost(I->getOpcode(), I->getType(), Op1VK,
                                        Op2VK);
   }
@@ -384,14 +381,15 @@ unsigned getInstructionCost(const Instruction *I,
   case Instruction::Store: {
     const StoreInst *SI = cast<StoreInst>(I);
     Type *ValTy = SI->getValueOperand()->getType();
-    return TTI->getMemoryOpCost(I->getOpcode(), ValTy, SI->getAlignment(),
-                                SI->getPointerAddressSpace());
+    return TTI->getMemoryOpCost(I->getOpcode(), ValTy,
+                                 SI->getAlignment(),
+                                 SI->getPointerAddressSpace());
   }
   case Instruction::Load: {
     const LoadInst *LI = cast<LoadInst>(I);
     return TTI->getMemoryOpCost(I->getOpcode(), I->getType(),
-                                LI->getAlignment(),
-                                LI->getPointerAddressSpace());
+                                 LI->getAlignment(),
+                                 LI->getPointerAddressSpace());
   }
   case Instruction::ZExt:
   case Instruction::SExt:
@@ -410,7 +408,7 @@ unsigned getInstructionCost(const Instruction *I,
     return TTI->getCastInstrCost(I->getOpcode(), I->getType(), SrcTy);
   }
   case Instruction::ExtractElement: {
-    const ExtractElementInst *EEI = cast<ExtractElementInst>(I);
+    const ExtractElementInst * EEI = cast<ExtractElementInst>(I);
     ConstantInt *CI = dyn_cast<ConstantInt>(I->getOperand(1));
     unsigned Idx = -1;
     if (CI)
@@ -430,12 +428,13 @@ unsigned getInstructionCost(const Instruction *I,
                                    EEI->getOperand(0)->getType(), Idx);
   }
   case Instruction::InsertElement: {
-    const InsertElementInst *IE = cast<InsertElementInst>(I);
+    const InsertElementInst * IE = cast<InsertElementInst>(I);
     ConstantInt *CI = dyn_cast<ConstantInt>(IE->getOperand(2));
     unsigned Idx = -1;
     if (CI)
       Idx = CI->getZExtValue();
-    return TTI->getVectorInstrCost(I->getOpcode(), IE->getType(), Idx);
+    return TTI->getVectorInstrCost(I->getOpcode(),
+                                   IE->getType(), Idx);
   }
   case Instruction::ShuffleVector: {
     const ShuffleVectorInst *Shuffle = cast<ShuffleVectorInst>(I);
@@ -448,20 +447,24 @@ unsigned getInstructionCost(const Instruction *I,
         return TTI->getShuffleCost(TargetTransformInfo::SK_Reverse, VecTypOp0,
                                    0, nullptr);
       if (isAlternateVectorMask(Mask))
-        return TTI->getShuffleCost(TargetTransformInfo::SK_Alternate, VecTypOp0,
-                                   0, nullptr);
+        return TTI->getShuffleCost(TargetTransformInfo::SK_Alternate,
+                                   VecTypOp0, 0, nullptr);
     }
 
     return -1;
   }
   case Instruction::Call:
     if (const IntrinsicInst *II = dyn_cast<IntrinsicInst>(I)) {
-      SmallVector<Type *, 4> Tys;
+      SmallVector<Value *, 4> Args;
       for (unsigned J = 0, JE = II->getNumArgOperands(); J != JE; ++J)
-        Tys.push_back(II->getArgOperand(J)->getType());
+        Args.push_back(II->getArgOperand(J));
+
+      FastMathFlags FMF;
+      if (auto *FPMO = dyn_cast<FPMathOperator>(II))
+        FMF = FPMO->getFastMathFlags();
 
       return TTI->getIntrinsicInstrCost(II->getIntrinsicID(), II->getType(),
-                                        Tys);
+                                        Args, FMF);
     }
     return -1;
   default:

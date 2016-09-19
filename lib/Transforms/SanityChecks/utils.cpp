@@ -173,7 +173,7 @@ bool getRegionFromInstructionSet(const InstructionSet &instrs,
 
     // Handle instructions in the middle of basic blocks
     Instruction* successor = skipDbgInfoIntrinsics(ins->getNextNode());
-    if (successor && successor != ins->getParent()->end()) {
+    if (successor) {
       //DEBUG(dbgs() << "Found successor inline: " << *ins << " -> " << *successor << "\n");
       predecessors[successor] = ins;
       continue;
@@ -184,7 +184,7 @@ bool getRegionFromInstructionSet(const InstructionSet &instrs,
     TerminatorInst *tins = cast<TerminatorInst>(ins);
     for (unsigned i = 0, e = tins->getNumSuccessors(); i < e; ++i) {
       BasicBlock *successorBB = tins->getSuccessor(i);
-      successor = skipDbgInfoIntrinsics(successorBB->begin());
+      successor = skipDbgInfoIntrinsics(&*successorBB->begin());
       //DEBUG(dbgs() << "Found successor from terminator: " << *ins << " -> " << *successor << "\n");
       predecessors[successor] = ins;
     }
