@@ -40,7 +40,7 @@ bool SanityCheckSampledCost::runOnFunction(Function &F) {
 
   const TargetTransformInfo &TTI = TTIWP.getTTI(F);
   SanityCheckInstructions &SCI = getAnalysis<SanityCheckInstructions>();
-  BlockFrequencyInfo &BFI = getAnalysis<BlockFrequencyInfo>();
+  BlockFrequencyInfo &BFI = getAnalysis<BlockFrequencyInfoWrapperPass>().getBFI();
 
   for (Instruction *Inst : SCI.getSanityCheckRoots()) {
     assert(Inst->getParent()->getParent() == &F &&
@@ -97,7 +97,7 @@ bool SanityCheckSampledCost::runOnFunction(Function &F) {
 }
 
 void SanityCheckSampledCost::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<BlockFrequencyInfo>();
+  AU.addRequired<BlockFrequencyInfoWrapperPass>();
   AU.addRequired<TargetTransformInfoWrapperPass>();
   AU.addRequired<SanityCheckInstructions>();
   AU.setPreservesAll();
@@ -133,6 +133,7 @@ double SanityCheckSampledCost::getExecutionCount(const Instruction *I, const Blo
 char SanityCheckSampledCost::ID = 0;
 INITIALIZE_PASS_BEGIN(SanityCheckSampledCost, "sanity-check-sampled-cost",
                       "Finds costs of sanity checks", false, false)
+INITIALIZE_PASS_DEPENDENCY(BlockFrequencyInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(SanityCheckInstructions)
 INITIALIZE_PASS_END(SanityCheckSampledCost, "sanity-check-sampled-cost",
