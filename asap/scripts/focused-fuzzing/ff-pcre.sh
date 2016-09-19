@@ -5,10 +5,11 @@ init_target() {
   fi
 }
 
-# Build pcre2 with the given `name` and `extra_cflags`.
+# Build pcre2 with the given `name` and flags.
 build_target_and_fuzzer() {
   local name="$1"
   local extra_cflags="$2"
+  local extra_ldflags="$3"
 
   if ! [ -d "target-${name}-build" ]; then
     mkdir "target-${name}-build"
@@ -17,14 +18,14 @@ build_target_and_fuzzer() {
     # Configure pcre2 with relatively low resource limits, to ensure fuzzing is
     # fast, and to avoid false positives from AddressSanitizer's low stack
     # overflow limits.
-    CC="$CC" CXX="$CXX" CFLAGS="$ASAN_CFLAGS $extra_cflags" LDFLAGS="$ASAN_LDFLAGS" ../pcre2-10.20/configure \
+    CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" ../pcre2-10.20/configure \
       --disable-shared --with-parens-nest-limit=200 --with-match-limit=1000000 --with-match-limit-recursion=200
     make -j $N_CORES V=1 libpcre2-posix.la libpcre2-8.la 2>&1 | tee "../logs/build-${name}.log"
 
-    "$CXX" $ASAN_CFLAGS $extra_cflags -std=c++11 \
+    "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
       -I "$WORK_DIR/target-${name}-build/src" -I "$WORK_DIR/pcre2-10.20/src" \
       -c "$SCRIPT_DIR/ff-pcre.cc"
-    "$CXX" $ASAN_LDFLAGS ff-pcre.o \
+    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-pcre.o \
       "$WORK_DIR/target-${name}-build/.libs/libpcre2-posix.a" \
       "$WORK_DIR/target-${name}-build/.libs/libpcre2-8.a" \
       "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer

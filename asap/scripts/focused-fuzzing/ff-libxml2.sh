@@ -19,21 +19,22 @@ init_target() {
   fi
 }
 
-# Build libxml with the given `name` and `extra_cflags`.
+# Build libxml with the given `name` and flags.
 build_target_and_fuzzer() {
   local name="$1"
   local extra_cflags="$2"
+  local extra_ldflags="$3"
 
   if ! [ -d "target-${name}-build" ]; then
     mkdir "target-${name}-build"
     cd "target-${name}-build"
-    CC="$CC" CXX="$CXX" CFLAGS="$ASAN_CFLAGS $extra_cflags" LDFLAGS="$ASAN_LDFLAGS" ../libxml2-src/configure $LIBXML_CONFIGURE_ARGS
+    CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" ../libxml2-src/configure $LIBXML_CONFIGURE_ARGS
     make -j $N_CORES V=1 libxml2.la include/libxml/xmlversion.h 2>&1 | tee "../logs/build-${name}.log"
 
-    "$CXX" $ASAN_CFLAGS $extra_cflags -std=c++11 \
+    "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
       -I "$WORK_DIR/target-${name}-build/include" -I "$WORK_DIR/libxml2-src/include" \
       -c "$SCRIPT_DIR/ff-libxml2.cc"
-    "$CXX" $ASAN_LDFLAGS ff-libxml2.o "$WORK_DIR/target-${name}-build/.libs/libxml2.a" \
+    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-libxml2.o "$WORK_DIR/target-${name}-build/.libs/libxml2.a" \
       "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer
     cd ..
   fi
