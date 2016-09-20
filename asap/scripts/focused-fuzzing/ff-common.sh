@@ -59,7 +59,7 @@ init_libfuzzer() {
 
   if ! [ -d Fuzzer-src ]; then
     git clone git@github.com:dslab-epfl/asap-libfuzzer.git Fuzzer-src
-    (cd Fuzzer-src && git checkout release_37)
+    (cd Fuzzer-src && git checkout release_39)
   fi
 
   if ! [ -d Fuzzer-build ]; then
