@@ -22,13 +22,13 @@ LIBFUZZER_CFLAGS="-O3 -g -Wall -std=c++11"
 DEFAULT_CFLAGS="-O3 -g -Wall -fsanitize=address -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
 DEFAULT_LDFLAGS="-fsanitize=address"
 
-COVERAGE_COUNTERS_CFLAGS="-fsanitize-coverage=edge,indirect-calls,8bit-counters"
+COVERAGE_COUNTERS_CFLAGS="-fsanitize-coverage=edge,indirect-calls,8bit-counters -mllvm -sanitizer-coverage-prune-blocks=false"
 COVERAGE_COUNTERS_LDFLAGS="-fsanitize-coverage=edge,indirect-calls,8bit-counters"
 
-COVERAGE_ICALLS_CFLAGS="-fsanitize-coverage=edge,indirect-calls"
+COVERAGE_ICALLS_CFLAGS="-fsanitize-coverage=edge,indirect-calls -mllvm -sanitizer-coverage-prune-blocks=false"
 COVERAGE_ICALLS_LDFLAGS="-fsanitize-coverage=edge,indirect-calls"
 
-COVERAGE_EDGE_CFLAGS="-fsanitize-coverage=edge"
+COVERAGE_EDGE_CFLAGS="-fsanitize-coverage=edge -mllvm -sanitizer-coverage-prune-blocks=false"
 COVERAGE_EDGE_LDFLAGS="-fsanitize-coverage=edge"
 
 SANITIZE_NOCHECKS_CFLAGS="-mllvm -asan-instrument-reads=0 -mllvm -asan-instrument-writes=0 -mllvm -asan-globals=0 -mllvm -asan-stack=0"
