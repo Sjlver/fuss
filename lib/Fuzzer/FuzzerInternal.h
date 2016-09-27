@@ -174,6 +174,11 @@ private:
   // Need to know our own thread.
   static thread_local bool IsMyThread;
 
+  // Stores the hash of the testcase being mutated. Used to log the corpus
+  // ancestry tree.
+  std::string ParentHash;
+};
+
   bool InMergeMode = false;
 };
 

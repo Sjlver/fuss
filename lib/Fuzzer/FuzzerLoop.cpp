@@ -502,6 +502,11 @@ size_t Fuzzer::RunOne(const uint8_t *Data, size_t Size) {
       Res = 1;
   }
 
+  if (Res) {
+    auto KidHash = Hash({Data, Data + Size});
+    Printf("ANCESTRY: %s -> %s\n", ParentHash.c_str(), KidHash.c_str());
+  }
+
   auto TimeOfUnit =
       duration_cast<seconds>(UnitStopTime - UnitStartTime).count();
   if (!(TotalNumberOfRuns & (TotalNumberOfRuns - 1)) &&
@@ -709,6 +714,7 @@ void Fuzzer::MutateAndTestOne() {
   assert(CurrentUnitData);
   size_t Size = U.size();
   assert(Size <= MaxInputLen && "Oversized Unit");
+  ParentHash = Hash(U);
   memcpy(CurrentUnitData, U.data(), Size);
 
   assert(MaxMutationLen > 0);
