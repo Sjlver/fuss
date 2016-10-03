@@ -95,7 +95,9 @@ bool isInstrumentation(const Instruction *I) {
       }
       if (name == "__sanitizer_cov" ||
           name == "__sanitizer_cov_with_check" ||
-          name == "__sanitizer_cov_indir_call16") {
+          name == "__sanitizer_cov_indir_call16" ||
+          name == "__sanitizer_cov_trace_pc" ||
+          name == "__sanitizer_cov_trace_pc_guard") {
         return OptimizeSanitizerCoverage;
       }
     }

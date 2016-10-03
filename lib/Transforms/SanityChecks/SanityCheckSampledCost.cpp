@@ -32,10 +32,14 @@ bool largerCost(const SanityCheckSampledCost::CheckCost &a,
   return a.second > b.second;
 }
 
+// How many cycles we assume an instrumentation function to take. Not much more
+// than a gross estimate.
 std::map<std::string, uint64_t> KNOWN_FUNCTION_COSTS = {
-  {"__sanitizer_cov", 80},
-  {"__sanitizer_cov_with_check", 80},
-  {"__sanitizer_cov_indir_call16", 80}
+  {"__sanitizer_cov", 20},
+  {"__sanitizer_cov_with_check", 20},
+  {"__sanitizer_cov_indir_call16", 20},
+  {"__sanitizer_cov_trace_pc", 20},
+  {"__sanitizer_cov_trace_pc_guard", 20}
 };
 } // anonymous namespace
 
