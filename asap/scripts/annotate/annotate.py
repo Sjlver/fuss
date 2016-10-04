@@ -24,7 +24,14 @@ class Annotator(object):
     def parse_function(self, s):
         m = Annotator.FUNCTION_RE.search(s)
         function_name, file_name, line_number = m.groups()
-        self.functions.append((function_name, file_name, int(line_number)))
+        function = (function_name, file_name, int(line_number))
+
+        # Some projects compile the same source file multiple times, or include
+        # the same file in multiple compilation units. We currently don't
+        # handle this very well... so simply skip duplicated functions.
+        if function in self.functions: return
+
+        self.functions.append(function)
 
         checks = Annotator.CHECK_RE.findall(s)
         for c in checks:
@@ -82,52 +89,55 @@ class Annotator(object):
         print()
 
         while check_index < len(self.checks):
-            if current_file_name != self.checks[check_index][1]:
-                current_file_name = self.checks[check_index][1]
-                with open(current_file_name) as f:
-                    print("//! File: {}".format(current_file_name))
-                    self.print_stats(*self.compute_stats(
-                        c for c in self.checks if c[1] == current_file_name))
+            assert current_file_name != self.checks[check_index][1]
+            current_file_name = self.checks[check_index][1]
 
-                    for line_number, line in enumerate(f):
-                        # Fast-forward to the right check/function
-                        while self.checks[check_index][1] == current_file_name and \
-                                self.checks[check_index][2] < line_number + 1:
-                            check_index += 1
-                        while self.functions[function_index][1] == current_file_name and \
-                                self.functions[function_index][2] < line_number + 1:
-                            function_index += 1
+            with open(current_file_name) as f:
+                print("//! File: {}".format(current_file_name))
+                self.print_stats(*self.compute_stats(
+                    c for c in self.checks if c[1] == current_file_name))
 
-                        if function_index < len(self.functions) and \
-                                line_number + 1 == self.functions[function_index][2] and \
-                                current_file_name == self.functions[function_index][1]:
-                            print("//! Function: {}".format(self.functions[function_index][0]))
-                            self.print_stats(*self.compute_stats(
-                                c for c in self.checks if c[0] == self.functions[function_index][0]))
+                for line_number, line in enumerate(f):
+                    # Fast-forward to the right check/function
+                    while check_index < len(self.checks) and \
+                            self.checks[check_index][1] == current_file_name and \
+                            self.checks[check_index][2] < line_number + 1:
+                        check_index += 1
+                    while function_index < len(self.functions) and \
+                            self.functions[function_index][1] == current_file_name and \
+                            self.functions[function_index][2] < line_number + 1:
+                        function_index += 1
 
-                        line_checks = []
-                        while check_index < len(self.checks) and \
-                                line_number + 1 == self.checks[check_index][2] and \
-                                current_file_name == self.checks[check_index][1]:
-                            line_checks.append(self.checks[check_index])
-                            check_index += 1
-                        line_checks.sort(key=lambda c: c[5])
+                    if function_index < len(self.functions) and \
+                            line_number + 1 == self.functions[function_index][2] and \
+                            current_file_name == self.functions[function_index][1]:
+                        print("//! Function: {}".format(self.functions[function_index][0]))
+                        self.print_stats(*self.compute_stats(
+                            c for c in self.checks if c[0] == self.functions[function_index][0]))
 
-                        if len(line_checks) > 1:
-                            check_summary = "".join("!" if c[4] == "removing" else "." for c in line_checks)
-                            if len(check_summary) > 10:
-                                check_summary = check_summary[:9] + "+"
-                            check_info = "{:10s} {:>8d}-{:<8d} | ".format(
-                                    check_summary,
-                                    line_checks[0][5], line_checks[-1][5])
-                        elif len(line_checks) == 1:
-                            check_info = "{:10s} {:^17d} | ".format(
-                                    "!" if line_checks[0][4] == "removing" else ".",
-                                    line_checks[0][5])
-                        else:
-                            check_info = " " * 29 + "| "
+                    line_checks = []
+                    while check_index < len(self.checks) and \
+                            line_number + 1 == self.checks[check_index][2] and \
+                            current_file_name == self.checks[check_index][1]:
+                        line_checks.append(self.checks[check_index])
+                        check_index += 1
+                    line_checks.sort(key=lambda c: c[5])
 
-                        print(check_info + line.rstrip())
+                    if len(line_checks) > 1:
+                        check_summary = "".join("!" if c[4] == "removing" else "." for c in line_checks)
+                        if len(check_summary) > 10:
+                            check_summary = check_summary[:9] + "+"
+                        check_info = "{:10s} {:>8d}-{:<8d} | ".format(
+                                check_summary,
+                                line_checks[0][5], line_checks[-1][5])
+                    elif len(line_checks) == 1:
+                        check_info = "{:10s} {:^17d} | ".format(
+                                "!" if line_checks[0][4] == "removing" else ".",
+                                line_checks[0][5])
+                    else:
+                        check_info = " " * 29 + "| "
+
+                    print(check_info + line.rstrip())
 
 
 def main():
