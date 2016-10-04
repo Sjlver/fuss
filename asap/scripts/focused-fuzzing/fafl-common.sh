@@ -82,6 +82,7 @@ test_fuzzer() {
       "./$AFL_VERSION/afl-fuzz" -d \
       -i "target-${name}-build/CORPUS" \
       -o "target-${name}-build/FINDINGS-$run_id" \
+      -T "$(basename $(readlink -f "target-${name}-build/target")) $name $run_id" \
       -- "target-${name}-build/target"
     cp "target-${name}-build/FINDINGS-$run_id/fuzzer_stats" "logs/fuzzer-${name}-${run_id}.log"
   fi
@@ -102,6 +103,7 @@ profile_fuzzer() {
         "./$AFL_VERSION/afl-fuzz" -d \
         -i "target-${name}-build/CORPUS" \
         -o "target-${name}-build/FINDINGS-$run_id" \
+        -T "$(basename $(readlink -f "target-${name}-build/target")) $name $run_id (perf)" \
         -- "target-${name}-build/target"
     ) 9>"/tmp/asap_global_perf_lock"
   fi
