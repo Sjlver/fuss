@@ -24,17 +24,17 @@ build_target() {
     exit 1
   fi
 
-  if ! [ -d "target-${name}-build" ]; then
+  if ! [ -x "target-${name}-build/target" ]; then
     rsync -a cb-multios/ --exclude .git "target-${name}-build"
     cd "target-${name}-build"
     AFL_CC="$AFL_CC" AFL_CXX="$AFL_CXX" CC="$CC" CXX="$CXX" \
       CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$extra_ldflags" ./build.sh "$cb_name" \
       2>&1 | tee "../logs/build-${name}.log"
 
-    ln -s "processed-challenges/$cb_name/bin/$cb_name" target
-
     mkdir CORPUS
     echo "init" > CORPUS/init
+
+    ln -s "processed-challenges/$cb_name/bin/$cb_name" target
     cd ..
   fi
 }

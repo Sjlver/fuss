@@ -20,7 +20,7 @@ build_target() {
   local extra_cflags="$2"
   local extra_ldflags="$3"
 
-  if ! [ -d "target-${name}-build" ]; then
+  if ! [ -x "target-${name}-build/target" ]; then
     mkdir "target-${name}-build"
     cd "target-${name}-build"
     AFL_CC="$AFL_CC" AFL_CXX="$AFL_CXX" CC="$CC" CXX="$CXX" \
@@ -28,11 +28,10 @@ build_target() {
       --disable-silent-rules --disable-dependency-tracking
     make -j $N_CORES V=1 pkgdatadir="$WORK_DIR/unrtf-0.21.9/outputs" 2>&1 | tee "../logs/build-${name}.log"
 
-    ln -s src/unrtf target
-
     mkdir CORPUS
     cp ../unrtf-0.21.9/tests/accents.rtf CORPUS/
 
+    ln -s src/unrtf target
     cd ..
   fi
 }

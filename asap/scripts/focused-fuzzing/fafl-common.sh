@@ -93,12 +93,17 @@ profile_fuzzer() {
   local perf_args="$2"
 
   if ! [ -f "perf-data/perf-${name}.data" ]; then
-    perf record $perf_args -o "perf-data/perf-${name}.data" \
-      timeout --preserve-status "${FUZZER_PROFILING_SECONDS}s" \
-      "./$AFL_VERSION/afl-fuzz" -d \
-      -i "target-${name}-build/CORPUS" \
-      -o "target-${name}-build/FINDINGS" \
-      -- "target-${name}-build/target"
+    (
+      # Only one perf process can run at the same time, because performance
+      # counters are a limited resource. Hence, use a global lock.
+      flock 9 || exit 1
+      perf record $perf_args -o "perf-data/perf-${name}.data" \
+        timeout --preserve-status "${FUZZER_PROFILING_SECONDS}s" \
+        "./$AFL_VERSION/afl-fuzz" -d \
+        -i "target-${name}-build/CORPUS" \
+        -o "target-${name}-build/FINDINGS-$run_id" \
+        -- "target-${name}-build/target"
+    ) 9>"/tmp/asap_global_perf_lock"
   fi
 
   # Convert perf data to LLVM profiling input.
