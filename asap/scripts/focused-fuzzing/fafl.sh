@@ -18,7 +18,7 @@ shift
 
 # For commands that have a target, load the extra file
 case "$command" in
-  "build"|"longrun")
+  "build"|"explore")
     if [ $# -lt 1 ]; then
       usage >&2
       echo >&2
@@ -37,7 +37,7 @@ case "$command" in
   "clean")   do_clean ;;
   "help")    usage; exit 0 ;;
   "build")   do_build "$@" ;;
-  "longrun") do_longrun "$@" ;;
+  "explore") do_explore "$@" ;;
   *)
     usage >&2
     echo >&2

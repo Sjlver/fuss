@@ -200,6 +200,7 @@ usage() {
   echo "  clean   - remove generated files"
   echo "  help    - show this help message"
   echo "  build   - build initial, pgo, and thresholded versions"
+  echo "  explore - build and test a small set of versions"
 }
 
 # clean: Remove generated files
@@ -213,4 +214,9 @@ do_build() {
   init_afl
   build_and_test_all
   print_summary
+}
+
+# explore: build and test a small set of versions
+do_explore() {
+  THRESHOLDS="100" do_build
 }
