@@ -30,7 +30,7 @@ FUZZER_TESTING_SECONDS=60
 FUZZER_PROFILING_SECONDS=60
 
 # Which thresholds and variants should we test?
-THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1}"
+THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5}"
 
 # Software versions
 AFL_VERSION="afl-2.35b"
@@ -55,19 +55,35 @@ init_afl() {
   "$CC" --version >/dev/null 2>&1
 }
 
+# Obtains an ID for the current testrun. This is a sequentially increasing,
+# unique number.
+get_run_id() {
+  (
+    flock --timeout 1 9 || exit 1
+    local previous_run_id="$(cat "$WORK_DIR/run_id" 2>/dev/null || echo "0")"
+
+    # Print run-id with leading zero for use in this script, but save it to the
+    # file without leading zero. Otherwise it's interpreted as octal number the
+    # next time. :-/
+    echo "$((previous_run_id + 1))" > "$WORK_DIR/run_id"
+    printf "%02d" "$((previous_run_id + 1))"
+  ) 9>"$WORK_DIR/.run_id.lock"
+}
+run_id="$(get_run_id)"
+
 # Test the fuzzer with the given `name`.
 test_fuzzer() {
   local name="$1"
 
-  if ! [ -f "logs/fuzzer-${name}.log" ]; then
-    rm -rf "target-${name}-build/FINDINGS"
-    mkdir -p "target-${name}-build/FINDINGS"
+  if ! [ -f "logs/fuzzer-${name}-${run_id}.log" ]; then
+    rm -rf "target-${name}-build/FINDINGS-$run_id"
+    mkdir -p "target-${name}-build/FINDINGS-$run_id"
     timeout --preserve-status "${FUZZER_TESTING_SECONDS}s" \
       "./$AFL_VERSION/afl-fuzz" -d \
       -i "target-${name}-build/CORPUS" \
-      -o "target-${name}-build/FINDINGS" \
+      -o "target-${name}-build/FINDINGS-$run_id" \
       -- "target-${name}-build/target"
-    cp "target-${name}-build/FINDINGS/fuzzer_stats" "logs/fuzzer-${name}.log"
+    cp "target-${name}-build/FINDINGS-$run_id/fuzzer_stats" "logs/fuzzer-${name}-${run_id}.log"
   fi
 }
 
@@ -97,15 +113,15 @@ profile_fuzzer() {
 compute_coverage() {
   local name="$1"
 
-  if ! [ -f "logs/coverage-${name}.log" ]; then
+  if ! [ -f "logs/coverage-${name}-${run_id}.log" ]; then
     local temp_map="$(mktemp)"
     local temp_all="$(mktemp)"
-    for infile in "target-${name}-build/FINDINGS/queue/"*; do
+    for infile in "target-${name}-build/FINDINGS-$run_id/queue/"*; do
       "./$AFL_VERSION/afl-showmap" -o "$temp_map" -t 1000 -q \
         -- "target-${name}-build/target" < "$infile"
       cat "$temp_map" >> "$temp_all"
     done
-    sort "$temp_all" | uniq > "logs/coverage-${name}.log"
+    sort "$temp_all" | uniq > "logs/coverage-${name}-${run_id}.log"
     rm "$temp_map" "$temp_all"
   fi
 }
@@ -160,16 +176,16 @@ print_summary() {
       bits="?"
 
       # Get units and execs/s from the final stats
-      execs="$(grep 'execs_done *:' logs/fuzzer-${name}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
-      execs_per_sec="$(grep 'execs_per_sec *:' logs/fuzzer-${name}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
-      units="$(grep 'paths_total *:' logs/fuzzer-${name}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
+      execs="$(grep 'execs_done *:' logs/fuzzer-${name}-${run_id}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
+      execs_per_sec="$(grep 'execs_per_sec *:' logs/fuzzer-${name}-${run_id}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
+      units="$(grep 'paths_total *:' logs/fuzzer-${name}-${run_id}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
 
-      actual_cov="$(wc -l < "logs/coverage-${name}.log")"
+      actual_cov="$(wc -l < "logs/coverage-${name}-${run_id}.log")"
       actual_bits="?"
 
       echo -e "$name\t$cov\t$bits\t$execs\t$execs_per_sec\t$units\t$actual_cov\t$actual_bits"
     done
-  ) | tee logs/summary.log
+  ) | tee "logs/summary-${run_id}.log"
 }
 
 # usage: print usage information
@@ -184,7 +200,7 @@ usage() {
 
 # clean: Remove generated files
 do_clean() {
-  rm -rf *-build logs perf-data
+  rm -rf *-build logs perf-data run_id .run_id.lock
 }
 
 # build: build initial, pgo, and thresholded versions
