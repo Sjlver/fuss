@@ -147,6 +147,10 @@ build_and_test_all() {
   test_fuzzer "pgo"
   compute_coverage "pgo"
 
+  # Now that we have a PGO version, we can compute coverages. Make up the
+  # coverage computation for the initial version.
+  compute_coverage "init"
+
   # Build and test various cost thresholds
   for threshold in $THRESHOLDS; do
     build_target "asap-$threshold" \
@@ -161,7 +165,7 @@ build_and_test_all() {
 print_summary() {
   local summary_versions="$@"
   if [ -z "$summary_versions"]; then
-    summary_versions="pgo $(for i in $THRESHOLDS; do echo asap-$i; done)"
+    summary_versions="init pgo $(for i in $THRESHOLDS; do echo asap-$i; done)"
   fi
 
   echo

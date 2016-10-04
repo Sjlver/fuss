@@ -14,7 +14,7 @@ import sys
 class Annotator(object):
     FUNCTION_RE = re.compile(r'^AsapPass: ran on (\w+) at ([^:]+):(\d+)',
             re.MULTILINE)
-    CHECK_RE = re.compile(r'^([^:]+):(\d+):(\d+): (keeping|removing) sanity check with cost i64 (\d+)',
+    CHECK_RE = re.compile(r'^([^:\n]+):(\d+):(\d+): (keeping|removing) sanity check with cost i64 (\d+)',
             re.MULTILINE)
 
     def __init__(self):
