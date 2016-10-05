@@ -180,7 +180,7 @@ print_summary() {
   echo "======="
   echo
   (
-    echo -e "name\tcov\tbits\texecs\texecs_per_sec\tunits\tactual_cov\tactual_bits"
+    printf "%20s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\n" "name" "cov" "bits" "execs" "execs_per_sec" "units" "actual_cov" "actual_bits"
 
     for name in $summary_versions; do
       cov="?"
@@ -194,7 +194,7 @@ print_summary() {
       actual_cov="$(wc -l < "logs/coverage-${name}-${run_id}.log")"
       actual_bits="?"
 
-      echo -e "$name\t$cov\t$bits\t$execs\t$execs_per_sec\t$units\t$actual_cov\t$actual_bits"
+      printf "%20s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\n" "$name" "$cov" "$bits" "$execs" "$execs_per_sec" "$units" "$actual_cov" "$actual_bits"
     done
   ) | tee "logs/summary-${run_id}.log"
 }

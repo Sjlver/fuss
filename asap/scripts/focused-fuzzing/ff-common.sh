@@ -193,7 +193,7 @@ print_summary() {
   echo "======="
   echo
   (
-    echo -e "name\tcov\tbits\texecs\texecs_per_sec\tunits\tactual_cov\tactual_bits"
+    printf "%20s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\n" "name" "cov" "bits" "execs" "execs_per_sec" "units" "actual_cov" "actual_bits"
 
     for name in $summary_versions; do
       # Get cov, bits from the last output line
@@ -209,7 +209,7 @@ print_summary() {
       actual_cov="$(grep '#[0-9]*.*DONE' logs/coverage-${name}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
       actual_bits="$(grep '#[0-9]*.*DONE' logs/coverage-${name}.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
 
-      echo -e "$name\t$cov\t$bits\t$execs\t$execs_per_sec\t$units\t$actual_cov\t$actual_bits"
+      printf "%20s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\n" "$name" "$cov" "$bits" "$execs" "$execs_per_sec" "$units" "$actual_cov" "$actual_bits"
     done
   ) | tee logs/summary.log
 }
