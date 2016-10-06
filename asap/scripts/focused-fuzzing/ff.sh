@@ -18,7 +18,7 @@ shift
 
 # For commands that have a target, load the extra file
 case "$command" in
-  "build"|"longrun")
+  "build"|"fuss"|"baseline"|"longrun")
     if [ $# -lt 1 ]; then
       usage >&2
       echo >&2
@@ -34,10 +34,12 @@ esac
 
 # Run the actual command
 case "$command" in
-  "clean")   do_clean ;;
-  "help")    usage; exit 0 ;;
-  "build")   do_build "$@" ;;
-  "longrun") do_longrun "$@" ;;
+  "clean")     do_clean ;;
+  "help")      usage; exit 0 ;;
+  "build")     do_build "$@" ;;
+  "fuss")      do_fuss "$@" ;;
+  "baseline")  do_baseline "$@" ;;
+  "longrun")   do_longrun "$@" ;;
   *)
     usage >&2
     echo >&2

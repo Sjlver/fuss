@@ -25,8 +25,8 @@ build_target_and_fuzzer() {
   local extra_cflags="$2"
   local extra_ldflags="$3"
 
-  if ! [ -d "target-${name}-build" ]; then
-    mkdir "target-${name}-build"
+  if ! [ -x "target-${name}-build/fuzzer" ]; then
+    mkdir -p "target-${name}-build"
     cd "target-${name}-build"
     CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" ../libxml2-src/configure $LIBXML_CONFIGURE_ARGS
     make -j $N_CORES V=1 libxml2.la include/libxml/xmlversion.h 2>&1 | tee "../logs/build-${name}.log"

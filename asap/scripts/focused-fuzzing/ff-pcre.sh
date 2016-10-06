@@ -11,8 +11,8 @@ build_target_and_fuzzer() {
   local extra_cflags="$2"
   local extra_ldflags="$3"
 
-  if ! [ -d "target-${name}-build" ]; then
-    mkdir "target-${name}-build"
+  if ! [ -x "target-${name}-build/fuzzer" ]; then
+    mkdir -p "target-${name}-build"
     cd "target-${name}-build"
 
     # Configure pcre2 with relatively low resource limits, to ensure fuzzing is

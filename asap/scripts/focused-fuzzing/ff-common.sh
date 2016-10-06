@@ -62,7 +62,7 @@ init_libfuzzer() {
     (cd Fuzzer-src && git checkout release_39)
   fi
 
-  if ! [ -d Fuzzer-build ]; then
+  if ! [ -f Fuzzer-build/libFuzzer.a ]; then
     mkdir Fuzzer-build
     cd Fuzzer-build
     for i in ../Fuzzer-src/*.cpp; do
@@ -74,29 +74,49 @@ init_libfuzzer() {
   fi
 }
 
+# Obtains an ID for the current testrun. This is a sequentially increasing,
+# unique number.
+get_run_id() {
+  (
+    flock --timeout 1 9 || exit 1
+    local previous_run_id="$(cat "$WORK_DIR/run_id" 2>/dev/null || echo "0")"
+
+    # Print run-id with leading zero for use in this script, but save it to the
+    # file without leading zero. Otherwise it's interpreted as octal number the
+    # next time. :-/
+    echo "$((previous_run_id + 1))" > "$WORK_DIR/run_id"
+    printf "%02d" "$((previous_run_id + 1))"
+  ) 9>"$WORK_DIR/.run_id.lock"
+}
+run_id="$(get_run_id)"
+
 # Test the fuzzer with the given `name`.
 test_fuzzer() {
   local name="$1"
 
-  if ! [ -f "logs/fuzzer-${name}.log" ]; then
-    rm -rf "target-${name}-build/CORPUS"
-    mkdir -p "target-${name}-build/CORPUS"
-    "./target-${name}-build/fuzzer" -seed=1 -max_total_time=$FUZZER_TESTING_SECONDS \
-      -print_final_stats=1 "target-${name}-build/CORPUS" 2>&1 \
-      | tee "logs/fuzzer-${name}.log"
+  if ! [ -f "logs/fuzzer-${name}-${run_id}.log" ]; then
+    echo "test_fuzzer: ${name} run_id: ${run_id} timestamp: $(date +%s)" \
+      | tee "logs/fuzzer-${name}-${run_id}.log"
+    mkdir -p "target-${name}-build/CORPUS-${run_id}"
+    "./target-${name}-build/fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
+      -print_final_stats=1 "target-${name}-build/CORPUS-${run_id}" 2>&1 \
+      | tee -a "logs/fuzzer-${name}-${run_id}.log"
   fi
 }
 
-# Run the fuzzer named `name` under perf, and create an llvm_prof file.
+# Run the fuzzer named `name` under perf, and create an llvm_prof file. The
+# fuzzer should have been tested before; we continue to use the same corpus.
 profile_fuzzer() {
   local name="$1"
   local perf_args="$2"
 
   if ! [ -f "perf-data/perf-${name}.data" ]; then
-    perf record $perf_args -o "perf-data/perf-${name}.data" \
-      "./target-${name}-build/fuzzer" -seed=1 -max_total_time=$FUZZER_PROFILING_SECONDS \
-      -print_final_stats=1 2>&1 \
+    echo "profile_fuzzer: ${name} timestamp: $(date +%s)" \
       | tee "logs/perf-${name}.log"
+    perf record $perf_args -o "perf-data/perf-${name}.data" \
+      "./target-${name}-build/fuzzer" -max_total_time=$FUZZER_PROFILING_SECONDS \
+      -print_final_stats=1 "target-${name}-build/CORPUS-${run_id}" 2>&1 \
+      | tee -a "logs/perf-${name}.log"
   fi
 
   # Convert perf data to LLVM profiling input.
@@ -111,9 +131,9 @@ profile_fuzzer() {
 compute_coverage() {
   local name="$1"
 
-  if ! [ -f "logs/coverage-${name}.log" ]; then
-    "./target-asan-pgo-build/fuzzer" -seed=1 -runs=0 "target-${name}-build/CORPUS" 2>&1 \
-      | tee "logs/coverage-${name}.log"
+  if ! [ -f "logs/coverage-${name}-${run_id}.log" ]; then
+    "./target-asan-pgo-build/fuzzer" -runs=0 "target-${name}-build/CORPUS-${run_id}" 2>&1 \
+      | tee "logs/coverage-${name}-${run_id}.log"
   fi
 }
 
@@ -197,17 +217,17 @@ print_summary() {
 
     for name in $summary_versions; do
       # Get cov, bits from the last output line
-      cov="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*' | sort -n | tail -n1)"
-      bits="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}.log | (grep -o 'bits: [0-9]*' || echo "bits: 0") | grep -o '[0-9]*' | sort -n | tail -n1)"
+      cov="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}-${run_id}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*' | sort -n | tail -n1)"
+      bits="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}-${run_id}.log | (grep -o 'bits: [0-9]*' || echo "bits: 0") | grep -o '[0-9]*' | sort -n | tail -n1)"
 
       # Get units and execs/s from the final stats
-      execs="$(grep 'stat::number_of_executed_units:' logs/fuzzer-${name}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
-      execs_per_sec="$(grep 'stat::average_exec_per_sec:' logs/fuzzer-${name}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
-      units="$(grep 'stat::new_units_added:' logs/fuzzer-${name}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
+      execs="$(grep 'stat::number_of_executed_units:' logs/fuzzer-${name}-${run_id}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
+      execs_per_sec="$(grep 'stat::average_exec_per_sec:' logs/fuzzer-${name}-${run_id}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
+      units="$(grep 'stat::new_units_added:' logs/fuzzer-${name}-${run_id}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
 
       # Get actual coverage from running the corpus against the PGO version
-      actual_cov="$(grep '#[0-9]*.*DONE' logs/coverage-${name}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
-      actual_bits="$(grep '#[0-9]*.*DONE' logs/coverage-${name}.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
+      actual_cov="$(grep '#[0-9]*.*DONE' logs/coverage-${name}-${run_id}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
+      actual_bits="$(grep '#[0-9]*.*DONE' logs/coverage-${name}-${run_id}.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
 
       printf "%20s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\n" "$name" "$cov" "$bits" "$execs" "$execs_per_sec" "$units" "$actual_cov" "$actual_bits"
     done
@@ -236,6 +256,57 @@ do_build() {
   init_libfuzzer
   build_and_test_all
   print_summary
+}
+
+# fuss: A complete iteration of fuss. This consists of initial testing,
+# profiling, and then some fuzzing.
+do_fuss() {
+  init_target
+  init_libfuzzer
+
+  local start_time="$(date +%s)"
+  local end_time="$((start_time + 300))"
+
+  echo "fuss: building asan version. timestamp: $start_time"
+  build_target_and_fuzzer "fuss-asan" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
+  echo "fuss: testing asan version. timestamp: $(date +%s)"
+  test_fuzzer "fuss-asan"
+  echo "fuss: profiling asan version. timestamp: $(date +%s)"
+  profile_fuzzer "fuss-asan" "-b"
+
+  # Rebuild a high-quality fuzzer.
+  local threshold=100
+  echo "fuss: building asap-$threshold version. timestamp: $(date +%s)"
+  build_target_and_fuzzer "fuss-$threshold" \
+    "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-fuss-asan.llvm_prof \
+    -fsanitize=asap -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose" \
+    "$COVERAGE_COUNTERS_LDFLAGS"
+
+  # Copy over the existing corpus (after all, we've earned that one)
+  cp -r "target-fuss-asan-build/CORPUS-${run_id}" "target-fuss-${threshold}-build/CORPUS-${run_id}"
+  
+  # And let the fuzzer run for some more time
+  local remaining="$((end_time - $(date +%s)))"
+  echo "fuss: testing asap-$threshold version. timestamp: $(date +%s) remaining: $remaining"
+  FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "fuss-$threshold"
+}
+
+# baseline: A complete iteration of fuss, except that it doesn't use fuss. This
+# is the baseline we compare against.
+do_baseline() {
+  init_target
+  init_libfuzzer
+
+  local start_time="$(date +%s)"
+  local end_time="$((start_time + 300))"
+
+  echo "fuss: building baseline version. timestamp: $start_time"
+  build_target_and_fuzzer "baseline" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
+  
+  # And let the fuzzer run for some more time
+  local remaining="$((end_time - $(date +%s)))"
+  echo "fuss: testing baseline version. timestamp: $(date +%s) remaining: $remaining"
+  FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "baseline"
 }
 
 # longrun: build and then run a target for a long time
