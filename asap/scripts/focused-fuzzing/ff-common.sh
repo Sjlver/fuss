@@ -45,8 +45,13 @@ MAX_LEN=${MAX_LEN:-128}
 export ASAN_OPTIONS="malloc_context_size=0"
 
 # The number of seconds for which we run fuzzers during testing and profiling
-FUZZER_TESTING_SECONDS=20
-FUZZER_PROFILING_SECONDS=20
+FUZZER_TESTING_SECONDS=${FUZZER_TESTING_SECONDS:-20}
+FUZZER_PROFILING_SECONDS=${FUZZER_PROFILING_SECONDS:-20}
+
+FUSS_TESTING_SECONDS=${FUSS_TESTING_SECONDS:-60}
+FUSS_PROFILING_SECONDS=${FUSS_PROFILING_SECONDS:-60}
+FUSS_THRESHOLD=${FUSS_THRESHOLD:-500}
+FUSS_TOTAL_SECONDS=${FUSS_TOTAL_SECONDS:-3600}
 
 # Which thresholds and variants should we test?
 THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1}"
@@ -247,7 +252,7 @@ usage() {
 
 # clean: Remove generated files
 do_clean() {
-  rm -rf *-build logs perf-data
+  rm -rf *-build logs perf-data run_id .run_id.lock
 }
 
 # build: build initial, pgo, and thresholded versions
@@ -264,31 +269,43 @@ do_fuss() {
   init_target
   init_libfuzzer
 
-  local start_time="$(date +%s)"
-  local end_time="$((start_time + 300))"
+  (
+    local start_time="$(date +%s)"
+    local end_time="$((start_time + FUSS_TOTAL_SECONDS))"
 
-  echo "fuss: building asan version. timestamp: $start_time"
-  build_target_and_fuzzer "fuss-asan" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
-  echo "fuss: testing asan version. timestamp: $(date +%s)"
-  test_fuzzer "fuss-asan"
-  echo "fuss: profiling asan version. timestamp: $(date +%s)"
-  profile_fuzzer "fuss-asan" "-b"
+    # Build and test initial fuzzers. Note: unlike for normal benchmarking, we
+    # do want to re-build and re-profile these each run. Thus, the fuzzer name
+    # contains the run_id.
+    echo "fuss: building asan-${run_id} version. timestamp: $start_time"
+    build_target_and_fuzzer "fuss-asan-${run_id}" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
+    echo "fuss: testing asan-${run_id} version. timestamp: $(date +%s)"
+    FUZZER_TESTING_SECONDS=$FUSS_TESTING_SECONDS test_fuzzer "fuss-asan-${run_id}"
+    echo "fuss: profiling asan-${run_id} version. timestamp: $(date +%s)"
+    FUZZER_PROFILING_SECONDS=$FUSS_PROFILING_SECONDS profile_fuzzer "fuss-asan-${run_id}" "-b"
 
-  # Rebuild a high-quality fuzzer.
-  local threshold=100
-  echo "fuss: building asap-$threshold version. timestamp: $(date +%s)"
-  build_target_and_fuzzer "fuss-$threshold" \
-    "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-fuss-asan.llvm_prof \
-    -fsanitize=asap -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose" \
-    "$COVERAGE_COUNTERS_LDFLAGS"
+    # Rebuild a high-quality fuzzer.
+    echo "fuss: building asap-$FUSS_THRESHOLD-${run_id} version. timestamp: $(date +%s)"
+    build_target_and_fuzzer "fuss-$FUSS_THRESHOLD-${run_id}" \
+      "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-fuss-asan-${run_id}.llvm_prof \
+      -fsanitize=asap -mllvm -asap-cost-threshold=$FUSS_THRESHOLD" \
+      "$COVERAGE_COUNTERS_LDFLAGS"
 
-  # Copy over the existing corpus (after all, we've earned that one)
-  cp -r "target-fuss-asan-build/CORPUS-${run_id}" "target-fuss-${threshold}-build/CORPUS-${run_id}"
-  
-  # And let the fuzzer run for some more time
-  local remaining="$((end_time - $(date +%s)))"
-  echo "fuss: testing asap-$threshold version. timestamp: $(date +%s) remaining: $remaining"
-  FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "fuss-$threshold"
+    # Copy over the existing corpus (after all, we've earned that one)
+    cp -r "target-fuss-asan-${run_id}-build/CORPUS-${run_id}" "target-fuss-${FUSS_THRESHOLD}-${run_id}-build/CORPUS-${run_id}"
+    
+    # And let the fuzzer run for some more time. We ignore crashes in the
+    # fuzzer, and simply stop it when this occurs.
+    local remaining="$((end_time - $(date +%s)))"
+    echo "fuss: testing asap-$FUSS_THRESHOLD version. timestamp: $(date +%s) remaining: $remaining"
+    FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "fuss-$FUSS_THRESHOLD-${run_id}" || true
+    echo "fuss: fuss end. timestamp: $(date +%s)"
+  ) | tee "logs/do_fuss-${run_id}.log"
+
+  # Compute coverage
+  "$SCRIPT_DIR/parse_libfuzzer_coverage_vs_time.py" \
+    --fuzzer "target-fuss-asan-${run_id}-build/fuzzer" \
+    --corpus "target-fuss-${FUSS_THRESHOLD}-${run_id}-build/CORPUS-${run_id}" \
+    < "logs/do_fuss-${run_id}.log" > "logs/do_fuss-${run_id}-coverage.tsv"
 }
 
 # baseline: A complete iteration of fuss, except that it doesn't use fuss. This
@@ -297,16 +314,26 @@ do_baseline() {
   init_target
   init_libfuzzer
 
-  local start_time="$(date +%s)"
-  local end_time="$((start_time + 300))"
+  (
+    local start_time="$(date +%s)"
+    local end_time="$((start_time + FUSS_TOTAL_SECONDS))"
 
-  echo "fuss: building baseline version. timestamp: $start_time"
-  build_target_and_fuzzer "baseline" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
-  
-  # And let the fuzzer run for some more time
-  local remaining="$((end_time - $(date +%s)))"
-  echo "fuss: testing baseline version. timestamp: $(date +%s) remaining: $remaining"
-  FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "baseline"
+    echo "fuss: building baseline-${run_id} version. timestamp: $start_time"
+    build_target_and_fuzzer "baseline-${run_id}" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
+    
+    # And let the fuzzer run for some time. We ignore crashes in the fuzzer,
+    # and simply stop it when this occurs.
+    local remaining="$((end_time - $(date +%s)))"
+    echo "fuss: testing baseline-${run_id} version. timestamp: $(date +%s) remaining: $remaining"
+    FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "baseline-${run_id}" || true
+    echo "fuss: baseline end. timestamp: $(date +%s)"
+  ) | tee "logs/do_baseline-${run_id}.log"
+
+  # Compute coverage
+  "$SCRIPT_DIR/parse_libfuzzer_coverage_vs_time.py" \
+    --fuzzer "target-baseline-${run_id}-build/fuzzer" \
+    --corpus "target-baseline-${run_id}-build/CORPUS-${run_id}" \
+    < "logs/do_baseline-${run_id}.log" > "logs/do_baseline-${run_id}-coverage.tsv"
 }
 
 # longrun: build and then run a target for a long time
