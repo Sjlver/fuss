@@ -1,0 +1,28 @@
+diff -Nur old/afl-fuzz.c new/afl-fuzz.c
+--- old/afl-fuzz.c	2016-09-20 04:38:39.000000000 +0200
++++ new/afl-fuzz.c	2016-10-08 12:43:11.203365162 +0200
+@@ -3135,6 +3135,12 @@
+ 
+     add_to_queue(fn, len, 0);
+ 
++    if (not_on_tty) {
++      ACTF("ANCESTRY: %06u -> %06u execs: %llu secs: %llu", current_entry, queued_paths,
++          total_execs, (get_cur_time() - start_time) / 1000);
++      fflush(stdout);
++    }
++
+     if (hnb == 2) {
+       queue_top->has_new_cov = 1;
+       queued_with_cov++;
+@@ -4925,8 +4931,9 @@
+ #endif /* ^IGNORE_FINDS */
+ 
+   if (not_on_tty) {
+-    ACTF("Fuzzing test case #%u (%u total, %llu uniq crashes found)...",
+-         current_entry, queued_paths, unique_crashes);
++    ACTF("Fuzzing test case #%u (%u total, %llu uniq crashes found). execs: %llu secs: %llu",
++         current_entry, queued_paths, unique_crashes, total_execs,
++         (get_cur_time() - start_time) / 1000);
+     fflush(stdout);
+   }
+ 

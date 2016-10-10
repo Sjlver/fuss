@@ -26,8 +26,13 @@ WORK_DIR="$(pwd)"
 N_CORES=${N_CORES:-$(getconf _NPROCESSORS_ONLN)}
 
 # The number of seconds for which we run fuzzers during testing and profiling
-FUZZER_TESTING_SECONDS=60
-FUZZER_PROFILING_SECONDS=60
+FUZZER_TESTING_SECONDS=${FUZZER_TESTING_SECONDS:-20}
+FUZZER_PROFILING_SECONDS=${FUZZER_PROFILING_SECONDS:-20}
+
+FUSS_TESTING_SECONDS=${FUSS_TESTING_SECONDS:-60}
+FUSS_PROFILING_SECONDS=${FUSS_PROFILING_SECONDS:-60}
+FUSS_THRESHOLD=${FUSS_THRESHOLD:-500}
+FUSS_TOTAL_SECONDS=${FUSS_TOTAL_SECONDS:-3600}
 
 # Which thresholds and variants should we test?
 THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5}"
@@ -44,6 +49,7 @@ init_afl() {
     [ -f "${AFL_VERSION}.tgz" ] || wget "http://lcamtuf.coredump.cx/afl/releases/${AFL_VERSION}.tgz"
     tar xf "${AFL_VERSION}.tgz"
     cd "$AFL_VERSION"
+    patch -p1 < "$SCRIPT_DIR/$AFL_VERSION.patch"
     AFL_TRACE_PC=1 make clean all
     cd "llvm_mode"
     AFL_TRACE_PC=1 make clean all
@@ -119,17 +125,22 @@ profile_fuzzer() {
 # See what coverage the fuzzer with the given `name` achieved
 compute_coverage() {
   local name="$1"
+  local reference="$2"
+
+  local queue_dir="target-${name}-build/FINDINGS-$run_id/queue"
+  local maps_dir="target-${name}-build/FINDINGS-$run_id/maps"
+  mkdir -p "$maps_dir"
 
   if ! [ -f "logs/coverage-${name}-${run_id}.log" ]; then
-    local temp_map="$(mktemp)"
     local temp_all="$(mktemp)"
-    for infile in "target-${name}-build/FINDINGS-$run_id/queue/"*; do
-      "./$AFL_VERSION/afl-showmap" -o "$temp_map" -t 1000 -q \
-        -- "target-${name}-build/target" < "$infile"
-      cat "$temp_map" >> "$temp_all"
+    for infile in "$queue_dir/"*; do
+      "./$AFL_VERSION/afl-showmap" -t 1000 -q \
+        -o "$maps_dir/$(basename "$infile")" \
+        -- "target-${reference}-build/target" < "$infile"
+      cat "$maps_dir/$(basename "$infile")" >> "$temp_all"
     done
     sort "$temp_all" | uniq > "logs/coverage-${name}-${run_id}.log"
-    rm "$temp_map" "$temp_all"
+    rm "$temp_all"
   fi
 }
 
@@ -152,11 +163,11 @@ build_and_test_all() {
 
   # Test the fuzzer. Should be faster now, due to PGO
   test_fuzzer "pgo"
-  compute_coverage "pgo"
+  compute_coverage "pgo" "pgo"
 
   # Now that we have a PGO version, we can compute coverages. Make up the
   # coverage computation for the initial version.
-  compute_coverage "init"
+  compute_coverage "init" "pgo"
 
   # Build and test various cost thresholds
   for threshold in $THRESHOLDS; do
@@ -164,7 +175,7 @@ build_and_test_all() {
       "-fprofile-sample-use=$WORK_DIR/perf-data/perf-init.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose" \
       ""
     test_fuzzer "asap-$threshold"
-    compute_coverage "asap-$threshold"
+    compute_coverage "asap-$threshold" "pgo"
   done
 }
 
@@ -191,8 +202,9 @@ print_summary() {
       execs_per_sec="$(grep 'execs_per_sec *:' logs/fuzzer-${name}-${run_id}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
       units="$(grep 'paths_total *:' logs/fuzzer-${name}-${run_id}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
 
-      actual_cov="$(wc -l < "logs/coverage-${name}-${run_id}.log")"
-      actual_bits="?"
+      # Get actual coverage from running the corpus against the PGO version
+      actual_cov="$(cat "logs/coverage-${name}-${run_id}.log" | sed 's/:.*//' | sort | uniq | wc)"
+      actual_bits="$(cat "logs/coverage-${name}-${run_id}.log" | wc)"
 
       printf "%20s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\n" "$name" "$cov" "$bits" "$execs" "$execs_per_sec" "$units" "$actual_cov" "$actual_bits"
     done
@@ -208,6 +220,8 @@ usage() {
   echo "  help    - show this help message"
   echo "  build   - build initial, pgo, and thresholded versions"
   echo "  explore - build and test a small set of versions"
+  echo "  fuss     - initial build, initial fuzzing, profiling, recompilation, long fuzzing"
+  echo "  baseline - like fuss, except without fussing :)"
 }
 
 # clean: Remove generated files
@@ -221,6 +235,80 @@ do_build() {
   init_afl
   build_and_test_all
   print_summary
+}
+
+# fuss: A complete iteration of fuss. This consists of initial testing,
+# profiling, and then some fuzzing.
+do_fuss() {
+  init_target
+  init_afl
+
+  (
+    local start_time="$(date +%s)"
+    local end_time="$((start_time + FUSS_TOTAL_SECONDS))"
+
+    # Build and test initial fuzzers. Note: unlike for normal benchmarking, we
+    # do want to re-build and re-profile these each run. Thus, the fuzzer name
+    # contains the run_id.
+    echo "fuss: building init-${run_id} version. timestamp: $start_time"
+    build_target "fuss-init-${run_id}" "" ""
+    echo "fuss: testing init-${run_id} version. timestamp: $(date +%s)"
+    FUZZER_TESTING_SECONDS=$FUSS_TESTING_SECONDS test_fuzzer "fuss-init-${run_id}"
+    rm -rf "target-fuss-init-${run_id}-build/CORPUS"
+    cp -r "target-fuss-init-${run_id}-build/FINDINGS-${run_id}/queue/" "target-fuss-init-${run_id}-build/CORPUS"
+    echo "fuss: profiling init-${run_id} version. timestamp: $(date +%s)"
+    FUZZER_PROFILING_SECONDS=$FUSS_PROFILING_SECONDS profile_fuzzer "fuss-init-${run_id}" "-b"
+
+    # Rebuild a high-quality fuzzer.
+    echo "fuss: building asap-${FUSS_THRESHOLD}-${run_id} version. timestamp: $(date +%s)"
+    build_target "fuss-${FUSS_THRESHOLD}-${run_id}" \
+      "-fprofile-sample-use=$WORK_DIR/perf-data/perf-fuss-init-${run_id}.llvm_prof \
+      -fsanitize=asap -mllvm -asap-cost-threshold=$FUSS_THRESHOLD" \
+      ""
+
+    # Copy over the existing corpus (after all, we've earned that one)
+    rm -rf "target-fuss-${FUSS_THRESHOLD}-${run_id}-build/CORPUS"
+    cp -r "target-fuss-init-${run_id}-build/FINDINGS-${run_id}/queue/" "target-fuss-${FUSS_THRESHOLD}-${run_id}-build/CORPUS"
+    
+    # And let the fuzzer run for some more time.
+    local remaining="$((end_time - $(date +%s)))"
+    echo "fuss: testing asap-$FUSS_THRESHOLD version. timestamp: $(date +%s) remaining: $remaining"
+    FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "fuss-${FUSS_THRESHOLD}-${run_id}"
+    echo "fuss: fuss end. timestamp: $(date +%s)"
+  ) | tee "logs/do_fuss-${run_id}.log"
+
+  # Compute coverage
+  compute_coverage "fuss-${FUSS_THRESHOLD}-${run_id}" "init-${run_id}"
+  "$SCRIPT_DIR/parse_afl_coverage_vs_time.py" \
+    --findings "target-fuss-${FUSS_THRESHOLD}-${run_id}-build/FINDINGS-${run_id}" \
+    < "logs/do_fuss-${run_id}.log" > "logs/do_fuss-${run_id}-coverage.tsv"
+}
+
+# baseline: A complete iteration of fuss, except that it doesn't use fuss. This
+# is the baseline we compare against.
+do_baseline() {
+  init_target
+  init_afl
+
+  (
+    local start_time="$(date +%s)"
+    local end_time="$((start_time + FUSS_TOTAL_SECONDS))"
+
+    echo "fuss: building baseline-${run_id} version. timestamp: $start_time"
+    build_target "baseline-${run_id}" "" ""
+    
+    # And let the fuzzer run for some time.
+    local remaining="$((end_time - $(date +%s)))"
+    echo "fuss: testing baseline-${run_id} version. timestamp: $(date +%s) remaining: $remaining"
+    FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "baseline-${run_id}"
+    echo "fuss: baseline end. timestamp: $(date +%s)"
+  ) | tee "logs/do_baseline-${run_id}.log"
+
+  # Compute coverage
+  compute_coverage "baseline-${run_id}" "baseline-${run_id}"
+  "$SCRIPT_DIR/parse_afl_coverage_vs_time.py" \
+    --findings "target-baseline-${run_id}-build/FINDINGS-${run_id}" \
+    < "logs/do_baseline-${run_id}.log" > "logs/do_baseline-${run_id}-coverage.tsv"
 }
 
 # explore: build and test a small set of versions

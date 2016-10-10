@@ -9,6 +9,13 @@ shift
 init_target() {
   if ! [ -d cb-multios ]; then
     git clone git@github.com:Sjlver/cb-multios.git
+
+    # This repo is quite big; remove unneeded stuff.
+    find cb-multios -type d -name poller | xargs rm -r
+    find cb-multios -type d -name pov | xargs rm -r
+    find cb-multios -type d -name support | xargs rm -r
+    rm -r cb-multios/tools/generate-polls/examples
+    rm -rf cb-multios/.git
   fi
 }
 

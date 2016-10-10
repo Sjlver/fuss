@@ -116,12 +116,17 @@ profile_fuzzer() {
   local perf_args="$2"
 
   if ! [ -f "perf-data/perf-${name}.data" ]; then
-    echo "profile_fuzzer: ${name} timestamp: $(date +%s)" \
-      | tee "logs/perf-${name}.log"
-    perf record $perf_args -o "perf-data/perf-${name}.data" \
-      "./target-${name}-build/fuzzer" -max_total_time=$FUZZER_PROFILING_SECONDS \
-      -print_final_stats=1 "target-${name}-build/CORPUS-${run_id}" 2>&1 \
-      | tee -a "logs/perf-${name}.log"
+    (
+      # Only one perf process can run at the same time, because performance
+      # counters are a limited resource. Hence, use a global lock.
+      flock 9 || exit 1
+      echo "profile_fuzzer: ${name} timestamp: $(date +%s)" \
+        | tee "logs/perf-${name}.log"
+      perf record $perf_args -o "perf-data/perf-${name}.data" \
+        "./target-${name}-build/fuzzer" -max_total_time=$FUZZER_PROFILING_SECONDS \
+        -print_final_stats=1 "target-${name}-build/CORPUS-${run_id}" 2>&1 \
+        | tee -a "logs/perf-${name}.log"
+    ) 9>"/tmp/asap_global_perf_lock"
   fi
 
   # Convert perf data to LLVM profiling input.
@@ -162,6 +167,10 @@ build_and_test_all() {
   # Test the fuzzer. Should be faster now, due to PGO
   test_fuzzer "asan-pgo"
   compute_coverage "asan-pgo"
+
+  # Now that we have a PGO version, we can compute coverages. Make up the
+  # coverage computation for the initial version.
+  compute_coverage "asan"
 
   # Build and test various cost thresholds
   for threshold in $THRESHOLDS; do
@@ -210,7 +219,7 @@ build_and_test_all() {
 print_summary() {
   local summary_versions="$@"
   if [ -z "$summary_versions"]; then
-    summary_versions="asan-pgo $(for i in $THRESHOLDS; do echo asap-$i; done) $(for i in $VARIANTS; do echo asan-$i; done)"
+    summary_versions="asan asan-pgo $(for i in $THRESHOLDS; do echo asap-$i; done) $(for i in $VARIANTS; do echo asan-$i; done)"
   fi
 
   echo
@@ -236,7 +245,7 @@ print_summary() {
 
       printf "%20s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\n" "$name" "$cov" "$bits" "$execs" "$execs_per_sec" "$units" "$actual_cov" "$actual_bits"
     done
-  ) | tee logs/summary.log
+  ) | tee "logs/summary-${run_id}.log"
 }
 
 # usage: print usage information
@@ -244,10 +253,12 @@ usage() {
   echo "ff.sh: Focused Fuzzing wrapper script"
   echo "usage: ff.sh command [command args]"
   echo "commands:"
-  echo "  clean   - remove generated files"
-  echo "  help    - show this help message"
-  echo "  build   - build initial, pgo, and thresholded versions"
-  echo "  longrun - build and then run a target for a long time"
+  echo "  clean    - remove generated files"
+  echo "  help     - show this help message"
+  echo "  build    - build initial, pgo, and thresholded versions"
+  echo "  longrun  - build and then run a target for a long time"
+  echo "  fuss     - initial build, initial fuzzing, profiling, recompilation, long fuzzing"
+  echo "  baseline - like fuss, except without fussing :)"
 }
 
 # clean: Remove generated files
