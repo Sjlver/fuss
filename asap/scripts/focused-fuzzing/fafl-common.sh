@@ -255,7 +255,7 @@ do_fuss() {
     echo "fuss: testing init-${run_id} version. timestamp: $(date +%s)"
     FUZZER_TESTING_SECONDS=$FUSS_TESTING_SECONDS test_fuzzer "fuss-init-${run_id}"
     rm -rf "target-fuss-init-${run_id}-build/CORPUS"
-    cp -r "target-fuss-init-${run_id}-build/FINDINGS-${run_id}/queue/" "target-fuss-init-${run_id}-build/CORPUS"
+    cp -ar "target-fuss-init-${run_id}-build/FINDINGS-${run_id}/queue/" "target-fuss-init-${run_id}-build/CORPUS"
     echo "fuss: profiling init-${run_id} version. timestamp: $(date +%s)"
     FUZZER_PROFILING_SECONDS=$FUSS_PROFILING_SECONDS profile_fuzzer "fuss-init-${run_id}" "-b"
 
@@ -268,7 +268,7 @@ do_fuss() {
 
     # Copy over the existing corpus (after all, we've earned that one)
     rm -rf "target-fuss-${FUSS_THRESHOLD}-${run_id}-build/CORPUS"
-    cp -r "target-fuss-init-${run_id}-build/FINDINGS-${run_id}/queue/" "target-fuss-${FUSS_THRESHOLD}-${run_id}-build/CORPUS"
+    cp -ar "target-fuss-init-${run_id}-build/FINDINGS-${run_id}/queue/" "target-fuss-${FUSS_THRESHOLD}-${run_id}-build/CORPUS"
     
     # And let the fuzzer run for some more time.
     local remaining="$((end_time - $(date +%s)))"
@@ -278,7 +278,7 @@ do_fuss() {
   ) | tee "logs/do_fuss-${run_id}.log"
 
   # Compute coverage
-  compute_coverage "fuss-${FUSS_THRESHOLD}-${run_id}" "init-${run_id}"
+  compute_coverage "fuss-${FUSS_THRESHOLD}-${run_id}" "fuss-init-${run_id}"
   "$SCRIPT_DIR/parse_afl_coverage_vs_time.py" \
     --findings "target-fuss-${FUSS_THRESHOLD}-${run_id}-build/FINDINGS-${run_id}" \
     < "logs/do_fuss-${run_id}.log" > "logs/do_fuss-${run_id}-coverage.tsv"

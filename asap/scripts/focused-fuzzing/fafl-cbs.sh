@@ -1,3 +1,5 @@
+CB_MULTIOS_REPO=${CB_MULTIOS_REPO:-git@github.com:Sjlver/cb-multios.git}
+
 cb_name="$1"
 if [ -z "$cb_name" ]; then
   echo "usage: fafl.sh <command> cbs <cb_name>" >&2
@@ -8,12 +10,12 @@ shift
 
 init_target() {
   if ! [ -d cb-multios ]; then
-    git clone git@github.com:Sjlver/cb-multios.git
+    git clone "$CB_MULTIOS_REPO" cb-multios
 
     # This repo is quite big; remove unneeded stuff.
-    find cb-multios -type d -name poller | xargs rm -r
-    find cb-multios -type d -name pov | xargs rm -r
-    find cb-multios -type d -name support | xargs rm -r
+    find cb-multios -type d -name poller -print0 | xargs -0 rm -r
+    find cb-multios -type d -name pov -print0 | xargs -0 rm -r
+    find cb-multios -type d -name support -print0 | xargs -0 rm -r
     rm -r cb-multios/tools/generate-polls/examples
     rm -rf cb-multios/.git
   fi
