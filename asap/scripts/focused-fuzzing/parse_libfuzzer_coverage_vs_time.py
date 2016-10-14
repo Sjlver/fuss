@@ -93,9 +93,12 @@ def main():
         last_event = events_up_to_now[-1]
         next_event = events[len(events_up_to_now)] if len(events) > len(events_up_to_now) \
                      else last_event
-        time_delta = float(next_event[0] - last_event[0])
-        time_fraction = float(current_time - last_event[0]) / time_delta
-        execs = last_event[2] + (next_event[2] - last_event[2]) * time_fraction
+        time_delta = next_event[0] - last_event[0]
+        if time_delta != 0:
+            time_fraction = float(current_time - last_event[0]) / time_delta
+            execs = last_event[2] + (next_event[2] - last_event[2]) * time_fraction
+        else:
+            execs = next_event[2]
         print("{:8.0f}\t{:8d}\t{:12d}".format(current_time, last_coverage, round(execs)))
         sys.stdout.flush()
 

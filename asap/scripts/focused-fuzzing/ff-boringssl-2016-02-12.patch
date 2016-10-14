@@ -1,0 +1,21 @@
+From 3e8e98b24737426cb485ed36c2f5ec5dd960e634 Mon Sep 17 00:00:00 2001
+From: Jonas Wagner <jonas.wagner@epfl.ch>
+Date: Fri, 14 Oct 2016 10:38:36 +0200
+Subject: [PATCH] Add missing #include <cstdint>
+
+---
+ fuzz/privkey.cc | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/fuzz/privkey.cc b/fuzz/privkey.cc
+index 094d438..bf39198 100644
+--- a/fuzz/privkey.cc
++++ b/fuzz/privkey.cc
+@@ -1,3 +1,4 @@
++#include <cstdint>
+ #include <openssl/evp.h>
+ 
+ extern "C" int LLVMFuzzerTestOneInput(uint8_t *buf, size_t len) {
+-- 
+2.7.4
+
