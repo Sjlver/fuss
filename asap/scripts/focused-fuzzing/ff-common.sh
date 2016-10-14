@@ -57,6 +57,10 @@ FUSS_TOTAL_SECONDS=${FUSS_TOTAL_SECONDS:-3600}
 THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1}"
 VARIANTS="${VARIANTS:-icalls edge nochecks nopoison noquarantine}"
 
+# Scripts can override this to use extra fuzzing args and corpora
+FUZZER_EXTRA_CORPORA=${FUZZER_EXTRA_CORPORA:-}
+FUZZER_EXTRA_ARGS=${FUZZER_EXTRA_ARGS:-}
+
 # Download and build LLVM's libFuzzer
 init_libfuzzer() {
   mkdir -p logs
@@ -104,7 +108,8 @@ test_fuzzer() {
       | tee "logs/fuzzer-${name}-${run_id}.log"
     mkdir -p "target-${name}-build/CORPUS-${run_id}"
     "./target-${name}-build/fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
-      -print_final_stats=1 "target-${name}-build/CORPUS-${run_id}" 2>&1 \
+      -print_final_stats=1 $FUZZER_EXTRA_ARGS \
+      "target-${name}-build/CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
       | tee -a "logs/fuzzer-${name}-${run_id}.log"
   fi
 }
@@ -124,7 +129,8 @@ profile_fuzzer() {
         | tee "logs/perf-${name}.log"
       perf record $perf_args -o "perf-data/perf-${name}.data" \
         "./target-${name}-build/fuzzer" -max_total_time=$FUZZER_PROFILING_SECONDS \
-        -print_final_stats=1 "target-${name}-build/CORPUS-${run_id}" 2>&1 \
+        -print_final_stats=1 $FUZZER_EXTRA_ARGS \
+        "target-${name}-build/CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
         | tee -a "logs/perf-${name}.log"
     ) 9>"/tmp/asap_global_perf_lock"
   fi
