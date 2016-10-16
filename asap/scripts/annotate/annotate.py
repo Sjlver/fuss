@@ -14,8 +14,9 @@ import sys
 class Annotator(object):
     FUNCTION_RE = re.compile(r'^AsapPass: ran on (\w+) at ([^:]+):(\d+)',
             re.MULTILINE)
-    CHECK_RE = re.compile(r'^([^:\n]+):(\d+):(\d+): (keeping|removing) sanity check with cost i64 (\d+)',
+    CHECK_RE = re.compile(r'^([^:\n]+):(\d+):(\d+): (keeping|removing) sanity check with cost i64 (\d+)(?:\s(\w+))?',
             re.MULTILINE)
+
 
     def __init__(self):
         self.checks = []
@@ -35,9 +36,10 @@ class Annotator(object):
 
         checks = Annotator.CHECK_RE.findall(s)
         for c in checks:
-            file_name, line_number, column_number, action, cost = c
+            file_name, line_number, column_number, action, cost, sanity_function = c
             self.checks.append((function_name, file_name, int(line_number),
-                                int(column_number), action, int(cost)))
+                                int(column_number), action, int(cost), sanity_function))
+
 
     def compute_stats(self, checks):
         total_checks = 0
@@ -74,6 +76,15 @@ class Annotator(object):
         print("//!   Cost: total {}, removed {}, kept {}, cost level {}".format(
             total_cost, removed_cost, total_cost - removed_cost,
             cost_level))
+
+    def print_details(self, line_checks):
+        for c in line_checks:
+            check_info = 29 * " " + "{:1s} {:20s} {:30s} with cost {:>8d} was {:10s}".format(
+                        "." if c[4] == "keeping" else "!", " ",
+                        c[6] or "<no info available>",
+                        c[5], "kept" if c[4] == "keeping" else "removed")
+            print(check_info)
+
 
     def annotate_files(self):
         # Sort checks / functions by file name and line number
@@ -127,18 +138,19 @@ class Annotator(object):
                         check_summary = "".join("!" if c[4] == "removing" else "." for c in line_checks)
                         if len(check_summary) > 10:
                             check_summary = check_summary[:9] + "+"
-                        check_info = "{:10s} {:>8d}-{:<8d} | ".format(
+                        check_info = "{:10s} {:>8d}-{:<8d} | {:<5d} ".format(
                                 check_summary,
-                                line_checks[0][5], line_checks[-1][5])
+                                line_checks[0][5], line_checks[-1][5], line_number + 1)
                     elif len(line_checks) == 1:
-                        check_info = "{:10s} {:^17d} | ".format(
+                        check_info = "{:10s} {:^17d} | {:<5d} ".format(
                                 "!" if line_checks[0][4] == "removing" else ".",
-                                line_checks[0][5])
+                                line_checks[0][5], line_number + 1)
                     else:
-                        check_info = " " * 29 + "| "
+                        check_info = " " * 29 + "| {:<5d}".format(line_number + 1) + " "
 
                     print(check_info + line.rstrip())
-
+                    #after printing the line, print the sanity checks information
+                    self.print_details(line_checks)
 
 def main():
     log_data = sys.stdin.read()
