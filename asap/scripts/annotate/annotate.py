@@ -6,6 +6,11 @@ annotate.py: Annotate source code with checks and their costs.
 Usage:
     cd /path/to/build/folder
     /path/to/annotate.py < /path/to/asap_build.log | less
+VIM usage:
+    vim
+    :set foldmethod=marker
+    :%!python /path/to/annotate.py < /path/to/asap_build.log
+    use zo and zc to fold and unfold
 """
 
 import re
@@ -78,12 +83,16 @@ class Annotator(object):
             cost_level))
 
     def print_details(self, line_checks):
+        if not line_checks:
+            return
+        print("{{{")
         for c in line_checks:
             check_info = 29 * " " + "{:1s} {:20s} {:30s} with cost {:>8d} was {:10s}".format(
                         "." if c[4] == "keeping" else "!", " ",
                         c[6] or "<no info available>",
                         c[5], "kept" if c[4] == "keeping" else "removed")
             print(check_info)
+        print("}}}")
 
 
     def annotate_files(self):
