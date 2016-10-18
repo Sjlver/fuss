@@ -48,6 +48,7 @@ export ASAN_OPTIONS="malloc_context_size=0"
 FUZZER_TESTING_SECONDS=${FUZZER_TESTING_SECONDS:-20}
 FUZZER_PROFILING_SECONDS=${FUZZER_PROFILING_SECONDS:-20}
 
+# Parameters for FUSS mode
 FUSS_TESTING_SECONDS=${FUSS_TESTING_SECONDS:-60}
 FUSS_PROFILING_SECONDS=${FUSS_PROFILING_SECONDS:-60}
 FUSS_THRESHOLD=${FUSS_THRESHOLD:-500}
@@ -106,11 +107,13 @@ test_fuzzer() {
   if ! [ -f "logs/fuzzer-${name}-${run_id}.log" ]; then
     echo "test_fuzzer: ${name} run_id: ${run_id} timestamp: $(date +%s)" \
       | tee "logs/fuzzer-${name}-${run_id}.log"
-    mkdir -p "target-${name}-build/CORPUS-${run_id}"
-    "./target-${name}-build/fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
+    cd "target-${name}-build"
+    mkdir -p "CORPUS-${run_id}"
+    "./fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
       -print_final_stats=1 $FUZZER_EXTRA_ARGS \
-      "target-${name}-build/CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
-      | tee -a "logs/fuzzer-${name}-${run_id}.log"
+      "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
+      | tee -a "../logs/fuzzer-${name}-${run_id}.log"
+    cd ..
   fi
 }
 
@@ -127,11 +130,13 @@ profile_fuzzer() {
       flock 9 || exit 1
       echo "profile_fuzzer: ${name} timestamp: $(date +%s)" \
         | tee "logs/perf-${name}.log"
-      perf record $perf_args -o "perf-data/perf-${name}.data" \
-        "./target-${name}-build/fuzzer" -max_total_time=$FUZZER_PROFILING_SECONDS \
+      cd "target-${name}-build"
+      perf record $perf_args -o "../perf-data/perf-${name}.data" \
+        "./fuzzer" -max_total_time=$FUZZER_PROFILING_SECONDS \
         -print_final_stats=1 $FUZZER_EXTRA_ARGS \
-        "target-${name}-build/CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
-        | tee -a "logs/perf-${name}.log"
+        "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
+        | tee -a "../logs/perf-${name}.log"
+      cd ..
     ) 9>"/tmp/asap_global_perf_lock"
   fi
 
