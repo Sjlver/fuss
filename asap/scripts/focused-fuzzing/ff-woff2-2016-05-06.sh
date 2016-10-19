@@ -34,13 +34,15 @@ build_target_and_fuzzer() {
     for f in font.cc normalize.cc transform.cc woff2_common.cc woff2_dec.cc woff2_enc.cc \
              glyph.cc table_tags.cc variable_length.cc woff2_out.cc; do
       "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 -I ../brotli/dec -I ../brotli/enc \
-        -c ../woff2/src/$f 2>&1 | tee -a "../logs/build-${name}.log"
+        -c ../woff2/src/$f 2>&1 | tee -a "../logs/build-${name}.log" &
     done
 
     for f in ../brotli/dec/*.c ../brotli/enc/*.cc; do
       "$CXX" $DEFAULT_CFLAGS $extra_cflags -c $f \
-        2>&1 | tee -a "../logs/build-${name}.log"
+        2>&1 | tee -a "../logs/build-${name}.log" &
     done
+
+    wait
 
     "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 -I ../woff2/src \
       -c "$SCRIPT_DIR/ff-woff2-2016-05-06.cc" \

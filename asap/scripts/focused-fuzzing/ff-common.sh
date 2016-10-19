@@ -41,6 +41,12 @@ WORK_DIR="$(pwd)"
 N_CORES=${N_CORES:-$(getconf _NPROCESSORS_ONLN)}
 MAX_LEN=${MAX_LEN:-128}
 
+if [ "$N_CORES" -ge 3 ]; then
+  N_FUZZER_JOBS="$((N_CORES - 2))"
+else
+  N_FUZZER_JOBS=1
+fi
+
 # Set ASAN_OPTIONS to defaults that favor speed over nice output
 export ASAN_OPTIONS="malloc_context_size=0"
 
@@ -110,8 +116,9 @@ test_fuzzer() {
     cd "target-${name}-build"
     mkdir -p "CORPUS-${run_id}"
     "./fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
-      -print_final_stats=1 $FUZZER_EXTRA_ARGS \
-      "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
+      -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
+      -artifact_prefix="CORPUS-${run_id}/" \
+      $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
       | tee -a "../logs/fuzzer-${name}-${run_id}.log"
     cd ..
   fi
@@ -133,8 +140,9 @@ profile_fuzzer() {
       cd "target-${name}-build"
       perf record $perf_args -o "../perf-data/perf-${name}.data" \
         "./fuzzer" -max_total_time=$FUZZER_PROFILING_SECONDS \
-        -print_final_stats=1 $FUZZER_EXTRA_ARGS \
-        "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
+        -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
+        -artifact_prefix="CORPUS-${run_id}/" \
+        $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
         | tee -a "../logs/perf-${name}.log"
       cd ..
     ) 9>"/tmp/asap_global_perf_lock"
@@ -301,9 +309,18 @@ do_fuss() {
     echo "fuss: building asan-${run_id} version. timestamp: $start_time"
     build_target_and_fuzzer "fuss-asan-${run_id}" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
     echo "fuss: testing asan-${run_id} version. timestamp: $(date +%s)"
-    FUZZER_TESTING_SECONDS=$FUSS_TESTING_SECONDS test_fuzzer "fuss-asan-${run_id}"
+    FUZZER_TESTING_SECONDS=$FUSS_TESTING_SECONDS test_fuzzer "fuss-asan-${run_id}" || true
+    if compgen -G "target-fuss-asan-${run_id}-build/CORPUS-${run_id}/crash-*" > /dev/null; then
+      echo "fuss: fuss end (found crash during initial testing). timestamp: $(date +%s)"
+      exit 0
+    fi
+      
     echo "fuss: profiling asan-${run_id} version. timestamp: $(date +%s)"
-    FUZZER_PROFILING_SECONDS=$FUSS_PROFILING_SECONDS profile_fuzzer "fuss-asan-${run_id}" "-b"
+    FUZZER_PROFILING_SECONDS=$FUSS_PROFILING_SECONDS profile_fuzzer "fuss-asan-${run_id}" "-b" || true
+    if compgen -G "target-fuss-asan-${run_id}-build/CORPUS-${run_id}/crash-*" > /dev/null; then
+      echo "fuss: fuss end (found crash during profiling). timestamp: $(date +%s)"
+      exit 0
+    fi
 
     # Rebuild a high-quality fuzzer.
     echo "fuss: building asap-$FUSS_THRESHOLD-${run_id} version. timestamp: $(date +%s)"

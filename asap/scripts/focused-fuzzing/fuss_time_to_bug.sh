@@ -20,10 +20,7 @@ if ! [ -d ff-template ]; then
   exit 1
 fi
 
-export PATH=/home/jowagner/autofdo:/home/jowagner/asap/build/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
-export FUSS_TOTAL_SECONDS=86400
-
-unset N_CORES
+export FUSS_TOTAL_SECONDS="${FUSS_TOTAL_SECONDS:-86400}"
 
 BENCHMARKS="${BENCHMARKS:-c-ares-CVE-2016-5180 file openssl-1.0.1f openssl-1.0.2d woff2-2016-05-06 libxml2 libxml2-v2.9.2 pcre2-10.00 re2-2014-12-09 boringssl-2016-02-12 harfbuzz-1.3.2}"
 
@@ -31,14 +28,15 @@ for benchmark in $BENCHMARKS; do
   (
     rsync -a ff-template/ ff-$benchmark
     cd ff-$benchmark
-    echo "$FUSS_START_ID" > run_id
+    if [ ! -e run_id ]; then
+      echo "$FUSS_START_ID" > run_id
+    fi
     for rep in $(seq "$FUSS_NUM_REPETITIONS"); do
       for version in baseline fuss; do
-        while [ "$(pgrep -f ff.sh | wc -l)" -ge 40 ]; do sleep 5; done
-        bash -x ~/asap/asap/asap/scripts/focused-fuzzing/ff.sh $version $benchmark &
-        sleep 90
+        bash -x ~/asap/asap/asap/scripts/focused-fuzzing/ff.sh $version $benchmark
+        sleep 5
       done
-      sleep 5
     done
   ) || true
+  sleep 5
 done
