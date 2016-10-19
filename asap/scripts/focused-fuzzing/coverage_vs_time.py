@@ -23,7 +23,7 @@ def main():
     for data_file in args.data:
         with open(data_file) as f:
             header = f.readline()
-            assert re.match(r'^time\s+coverage\s+execs\s*$', header)
+            assert re.match(r'^time\s+coverage\s+bits\s+units\s+execs\s*$', header)
             data.append(np.loadtxt(f))
 
     plt.title('Coverage and executions vs time')
@@ -37,7 +37,7 @@ def main():
     for i, series in enumerate(data):
         legend = args.legend[i] if args.legend[i] not in legends else None
         legends.add(legend)
-        plt.plot(series[:, 0], series[:, 2], args.format[i], label=legend, alpha=0.3, linewidth=2)
+        plt.plot(series[:, 0], series[:, 4], args.format[i], label=legend, alpha=0.3, linewidth=2)
     plt.xlabel('Time [seconds]')
     plt.ylabel('Executions')
     plt.legend(loc='upper left')

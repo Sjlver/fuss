@@ -14,7 +14,7 @@ import numpy as np
 TIMESTAMP_RE = re.compile(r' timestamp: (\d+)$')
 SECONDS_RE = re.compile(r'^#(\d+)\s.* secs: (\d+)(:? |$)')
 ANCESTRY_RE = re.compile(r'^ANCESTRY: ([0-9a-f]+) -> ([0-9a-f]+)$')
-COVERAGE_BITS_RE = re.compile(br'^#\d+.*\sDONE\s.* cov: (\d+)(:? |$)', re.MULTILINE)
+COVERAGE_BITS_RE = re.compile(br'^#\d+.*\sDONE\s.* cov: (\d+) bits: (\d+)(:? |$)', re.MULTILINE)
 JOB_EXITED_RE = re.compile(r'===+ Job (\d+) exited with exit code \d+ ===+')
 
 def parse_logs(f):
@@ -72,7 +72,7 @@ def coverage_for_units(units, fuzzer):
 
         output = subprocess.check_output([fuzzer, "-runs=0", tmp], stderr=subprocess.STDOUT)
         m = COVERAGE_BITS_RE.search(output)
-        return int(m.group(1))
+        return int(m.group(1)), int(m.group(2))
 
 def main():
     parser = argparse.ArgumentParser(description="Compute coverage vs time from LibFuzzer logs")
@@ -87,20 +87,25 @@ def main():
     all_jobs = set(j for _, _, _, j in events)
 
     end_time, _, _, _ = events[-1]
-    last_coverage = 0
+    if end_time <= 100:
+        time_ticks = np.arange(end_time + 1)
+    else:
+        time_ticks = np.linspace(0, end_time, num=100)
+
+    last_coverage = last_bits = 0
     last_num_units = 0
 
-    print("{:8s}\t{:8s}\t{:12s}".format("time", "coverage", "execs"))
-    for current_time in np.linspace(0, end_time, num=100):
+    print("{:8s}\t{:8s}\t{:8s}\t{:8s}\t{:12s}".format("time", "coverage", "bits", "units", "execs"))
+    for current_time in time_ticks:
         events_up_to_now = [(t, u, e, j) for t, u, e, j in events if t <= current_time]
         if not events_up_to_now:
-            print("{:8.0f}\t{:8d}\t{:12d}".format(current_time, 0, 0))
+            print("{:8.0f}\t{:8d}\t{:8d}\t{:8d}\t{:12d}".format(current_time, 0, 0, 0, 0))
             continue
 
         # Compute coverage
-        units_up_to_now = [u for t, u, e, j in events_up_to_now if u is not None]
+        units_up_to_now = set(u for t, u, e, j in events_up_to_now if u is not None)
         if len(units_up_to_now) > last_num_units:
-            last_coverage = coverage_for_units(units_up_to_now, args.fuzzer)
+            last_coverage, last_bits = coverage_for_units(units_up_to_now, args.fuzzer)
             last_num_units = len(units_up_to_now)
 
         # Compute execs (interpolate between last and next event)
@@ -120,7 +125,7 @@ def main():
             else:
                 execs = next_event[1]
             total_execs += execs
-        print("{:8.0f}\t{:8d}\t{:12d}".format(current_time, last_coverage, round(total_execs)))
+        print("{:8.0f}\t{:8d}\t{:8d}\t{:8d}\t{:12d}".format(current_time, last_coverage, last_bits, last_num_units, round(total_execs)))
         sys.stdout.flush()
 
 if __name__ == '__main__':
