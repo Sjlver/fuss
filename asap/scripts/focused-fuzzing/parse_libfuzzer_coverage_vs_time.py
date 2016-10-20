@@ -78,6 +78,8 @@ def main():
     parser = argparse.ArgumentParser(description="Compute coverage vs time from LibFuzzer logs")
     parser.add_argument("--fuzzer", help="Path to the reference fuzzer", required=True)
     parser.add_argument("--corpus", help="Path to the corpus", required=True)
+    parser.add_argument("--num-ticks", type=int, default=20,
+	help="Number of time ticks (more = better graphs and slower execution. Default 20)")
     args = parser.parse_args()
 
     events = parse_logs(sys.stdin)
@@ -87,10 +89,10 @@ def main():
     all_jobs = set(j for _, _, _, j in events)
 
     end_time, _, _, _ = events[-1]
-    if end_time <= 100:
+    if end_time <= args.num_ticks:
         time_ticks = np.arange(end_time + 1)
     else:
-        time_ticks = np.linspace(0, end_time, num=100)
+        time_ticks = np.linspace(0, end_time, num=args.num_ticks)
 
     last_coverage = last_bits = 0
     last_num_units = 0
