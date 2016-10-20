@@ -340,10 +340,16 @@ do_fuss() {
     echo "fuss: fuss end. timestamp: $(date +%s)"
   ) | tee "logs/do_fuss-${run_id}.log"
 
-  # Compute coverage
+  # Compute coverage. Carefully choose the right corpus; if a crash is found
+  # during initialization or profiling, then the fuss-$FUSS_THRESHOLD corpus
+  # does not exist yet.
+  local corpus_for_coverage="target-fuss-${FUSS_THRESHOLD}-${run_id}-build/CORPUS-${run_id}"
+  if ! [ -d "$corpus_for_coverage" ]; then
+    corpus_for_coverage="target-fuss-asan-${run_id}-build/CORPUS-${run_id}"
+  fi
   "$SCRIPT_DIR/parse_libfuzzer_coverage_vs_time.py" \
     --fuzzer "target-fuss-asan-${run_id}-build/fuzzer" \
-    --corpus "target-fuss-${FUSS_THRESHOLD}-${run_id}-build/CORPUS-${run_id}" \
+    --corpus "$corpus_for_coverage" \
     < "logs/do_fuss-${run_id}.log" > "logs/do_fuss-${run_id}-coverage.tsv"
 }
 
