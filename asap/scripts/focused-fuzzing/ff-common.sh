@@ -466,18 +466,20 @@ do_benchmark() {
   echo "Benchmark"
   echo "========="
   echo
-  for version in $versions; do
-    if [ "$version" = "asan-nopoison" ]; then
-      extra_asan_options="$SANITIZE_NOPOISON_OPTIONS"
-    elif [ "$version" = "asan-noquarantine" ]; then
-      extra_asan_options="$SANITIZE_NOQUARANTINE_OPTIONS"
-    fi
+  (
+    for version in $versions; do
+      if [ "$version" = "asan-nopoison" ]; then
+        extra_asan_options="$SANITIZE_NOPOISON_OPTIONS"
+      elif [ "$version" = "asan-noquarantine" ]; then
+        extra_asan_options="$SANITIZE_NOQUARANTINE_OPTIONS"
+      fi
 
-    printf "%30s\t" "$version"
-    ASAN_OPTIONS="$ASAN_OPTIONS:$extra_asan_options" ./target-${version}-build/fuzzer \
-      -max_total_time=$FUZZER_BENCHMARKING_SECONDS \
-      -print_final_stats=1 -benchmark=1 "$corpus_for_benchmark" 2>&1 | \
-      grep stat::number_of_executed_units | grep -o '[0-9]\+'
-  done
+      printf "%30s\t" "$version"
+      ASAN_OPTIONS="$ASAN_OPTIONS:$extra_asan_options" ./target-${version}-build/fuzzer \
+        -max_total_time=$FUZZER_BENCHMARKING_SECONDS \
+        -print_final_stats=1 -benchmark=1 "$corpus_for_benchmark" 2>&1 | \
+        grep stat::number_of_executed_units | grep -o '[0-9]\+'
+    done
+  ) | tee "logs/benchmark-${run_id}.log"
 }
 
