@@ -19,17 +19,17 @@ fi
 CC="$(which clang)"
 CXX="$(which clang++)"
 LIBFUZZER_CFLAGS="-O3 -g -Wall -std=c++11"
-DEFAULT_CFLAGS="-O3 -g -Wall -fsanitize=address -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
-DEFAULT_LDFLAGS="-fsanitize=address"
+DEFAULT_CFLAGS="-O3 -g -Wall -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
+DEFAULT_LDFLAGS=""
 
-COVERAGE_COUNTERS_CFLAGS="-fsanitize-coverage=edge,indirect-calls,8bit-counters"
-COVERAGE_COUNTERS_LDFLAGS="-fsanitize-coverage=edge,indirect-calls,8bit-counters"
+COVERAGE_COUNTERS_CFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters"
+COVERAGE_COUNTERS_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters"
 
-COVERAGE_ICALLS_CFLAGS="-fsanitize-coverage=edge,indirect-calls"
-COVERAGE_ICALLS_LDFLAGS="-fsanitize-coverage=edge,indirect-calls"
+COVERAGE_ICALLS_CFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls"
+COVERAGE_ICALLS_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls"
 
-COVERAGE_EDGE_CFLAGS="-fsanitize-coverage=edge"
-COVERAGE_EDGE_LDFLAGS="-fsanitize-coverage=edge"
+COVERAGE_EDGE_CFLAGS="-fsanitize=address -fsanitize-coverage=edge"
+COVERAGE_EDGE_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge"
 
 SANITIZE_NOCHECKS_CFLAGS="-mllvm -asan-instrument-reads=0 -mllvm -asan-instrument-writes=0 -mllvm -asan-globals=0 -mllvm -asan-stack=0"
 SANITIZE_NOPOISON_OPTIONS="poison_heap=0"
@@ -53,6 +53,7 @@ export ASAN_OPTIONS="malloc_context_size=0"
 # The number of seconds for which we run fuzzers during testing and profiling
 FUZZER_TESTING_SECONDS=${FUZZER_TESTING_SECONDS:-20}
 FUZZER_PROFILING_SECONDS=${FUZZER_PROFILING_SECONDS:-20}
+FUZZER_BENCHMARKING_SECONDS=${FUZZER_BENCHMARKING_SECONDS:-5}
 
 # Parameters for FUSS mode
 FUSS_TESTING_SECONDS=${FUSS_TESTING_SECONDS:-60}
@@ -62,7 +63,7 @@ FUSS_TOTAL_SECONDS=${FUSS_TOTAL_SECONDS:-3600}
 
 # Which thresholds and variants should we test?
 THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1}"
-VARIANTS="${VARIANTS:-icalls edge nochecks nopoison noquarantine}"
+VARIANTS="${VARIANTS:-icalls edge nochecks nopoison noquarantine noinstrumentation}"
 
 # Scripts can override this to use extra fuzzing args and corpora
 FUZZER_EXTRA_CORPORA=${FUZZER_EXTRA_CORPORA:-}
@@ -167,37 +168,27 @@ compute_coverage() {
 }
 
 # Generate and test initial, pgo, and thresholded versions
-build_and_test_all() {
+build_all() {
   # Initial build; simply AddressSanitizer, no PGO, no ASAP.
   build_target_and_fuzzer "asan" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
 
-  # Test the fuzzer.
-  test_fuzzer "asan"
-
   # Run the fuzzer under perf. Use branch tracing because that's what
   # create_llvm_prof wants.
-  profile_fuzzer "asan" "-b"
+  if ! [ -f "perf-data/perf-asan.llvm_prof" ]; then
+    test_fuzzer "asan"
+    profile_fuzzer "asan" "-b"
+  fi
 
   # Re-build using profiling data.
   build_target_and_fuzzer "asan-pgo" \
     "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" \
     "$COVERAGE_COUNTERS_LDFLAGS"
 
-  # Test the fuzzer. Should be faster now, due to PGO
-  test_fuzzer "asan-pgo"
-  compute_coverage "asan-pgo"
-
-  # Now that we have a PGO version, we can compute coverages. Make up the
-  # coverage computation for the initial version.
-  compute_coverage "asan"
-
   # Build and test various cost thresholds
   for threshold in $THRESHOLDS; do
     build_target_and_fuzzer "asap-$threshold" \
       "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose" \
       "$COVERAGE_COUNTERS_LDFLAGS"
-    test_fuzzer "asap-$threshold"
-    compute_coverage "asap-$threshold"
   done
 
   # Create extra variants to measure how much each feature contributes to
@@ -205,33 +196,60 @@ build_and_test_all() {
 
   if echo "$VARIANTS" | grep -q icalls; then
     build_target_and_fuzzer "asan-icalls" "$COVERAGE_ICALLS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_ICALLS_LDFLAGS"
-    test_fuzzer "asan-icalls"
-    compute_coverage "asan-icalls"
   fi
 
   if echo "$VARIANTS" | grep -q edge; then
     build_target_and_fuzzer "asan-edge" "$COVERAGE_EDGE_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_EDGE_LDFLAGS"
-    test_fuzzer "asan-edge"
-    compute_coverage "asan-edge"
   fi
 
   if echo "$VARIANTS" | grep -q nochecks; then
     build_target_and_fuzzer "asan-nochecks" "$COVERAGE_COUNTERS_CFLAGS $SANITIZE_NOCHECKS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_COUNTERS_LDFLAGS"
-    test_fuzzer "asan-nochecks"
-    compute_coverage "asan-nochecks"
   fi
 
   if echo "$VARIANTS" | grep -q nopoison; then
     build_target_and_fuzzer "asan-nopoison" "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_COUNTERS_LDFLAGS"
-    ASAN_OPTIONS="$ASAN_OPTIONS:$SANITIZE_NOPOISON_OPTIONS" test_fuzzer "asan-nopoison"
-    ASAN_OPTIONS="$ASAN_OPTIONS:$SANITIZE_NOPOISON_OPTIONS" compute_coverage "asan-nopoison"
   fi
 
   if echo "$VARIANTS" | grep -q noquarantine; then
     build_target_and_fuzzer "asan-noquarantine" "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_COUNTERS_LDFLAGS"
-    ASAN_OPTIONS="$ASAN_OPTIONS:$SANITIZE_NOQUARANTINE_OPTIONS" test_fuzzer "asan-noquarantine"
-    ASAN_OPTIONS="$ASAN_OPTIONS:$SANITIZE_NOQUARANTINE_OPTIONS" compute_coverage "asan-noquarantine"
   fi
+
+  if echo "$VARIANTS" | grep -q noinstrumentation; then
+    build_target_and_fuzzer "asan-noinstrumentation" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_COUNTERS_LDFLAGS"
+  fi
+}
+
+# Test all versions that have been built by build_all
+test_all() {
+  # Test the initial build.
+  test_fuzzer "asan"
+  compute_coverage "asan"
+
+  # Test the PGO build.
+  test_fuzzer "asan-pgo"
+  compute_coverage "asan-pgo"
+
+  # Test various cost thresholds
+  for threshold in $THRESHOLDS; do
+    test_fuzzer "asap-$threshold"
+    compute_coverage "asap-$threshold"
+  done
+
+  # Test extra variants to measure how much each feature contributes to
+  # overhead and coverage.
+  for variant in $VARIANTS; do
+    if [ "$variant" = "nopoison" ]; then
+      ASAN_OPTIONS="$ASAN_OPTIONS:$SANITIZE_NOPOISON_OPTIONS" test_fuzzer "asan-nopoison"
+    elif [ "$variant" = "noquarantine" ]; then
+      ASAN_OPTIONS="$ASAN_OPTIONS:$SANITIZE_NOQUARANTINE_OPTIONS" test_fuzzer "asan-noquarantine"
+    elif [ "$variant" = "noinstrumentation" ]; then
+      mkdir -p "target-asan-noinstrumentation-build/CORPUS-$run_id"
+      FUZZER_EXTRA_ARGS="-prune_corpus=0" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-noinstrumentation"
+    else
+      test_fuzzer "asan-$variant"
+    fi
+    compute_coverage "asan-$variant"
+  done
 }
 
 # Print out a summary that we can export to spreadsheet
@@ -250,7 +268,7 @@ print_summary() {
 
     for name in $summary_versions; do
       # Get cov, bits from the last output line
-      cov="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}-${run_id}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*' | sort -n | tail -n1)"
+      cov="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}-${run_id}.log | (grep -o 'cov: [0-9]*' || echo "cov: 0") | grep -o '[0-9]*' | sort -n | tail -n1)"
       bits="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}-${run_id}.log | (grep -o 'bits: [0-9]*' || echo "bits: 0") | grep -o '[0-9]*' | sort -n | tail -n1)"
 
       # Get units and execs/s from the final stats
@@ -289,7 +307,8 @@ do_clean() {
 do_build() {
   init_target
   init_libfuzzer
-  build_and_test_all
+  build_all
+  test_all
   print_summary
 }
 
@@ -432,3 +451,33 @@ do_longrun() {
     "CORPUS" "$GLOBAL_CORPUS"
   cd ..
 }
+
+# benchmark: Measure execution speed of various versions
+do_benchmark() {
+  init_target
+  init_libfuzzer
+  build_all
+
+  local versions="asan asan-pgo $(for i in $THRESHOLDS; do echo asap-$i; done) $(for i in $VARIANTS; do echo asan-$i; done)"
+  local corpus_for_benchmark="$(ls -d target-asan-build/CORPUS-* | head -n1)"
+  local extra_asan_options=
+
+  echo
+  echo "Benchmark"
+  echo "========="
+  echo
+  for version in $versions; do
+    if [ "$version" = "asan-nopoison" ]; then
+      extra_asan_options="$SANITIZE_NOPOISON_OPTIONS"
+    elif [ "$version" = "asan-noquarantine" ]; then
+      extra_asan_options="$SANITIZE_NOQUARANTINE_OPTIONS"
+    fi
+
+    printf "%30s\t" "$version"
+    ASAN_OPTIONS="$ASAN_OPTIONS:$extra_asan_options" ./target-${version}-build/fuzzer \
+      -max_total_time=$FUZZER_BENCHMARKING_SECONDS \
+      -print_final_stats=1 -benchmark=1 "$corpus_for_benchmark" 2>&1 | \
+      grep stat::number_of_executed_units | grep -o '[0-9]\+'
+  done
+}
+
