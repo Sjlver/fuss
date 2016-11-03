@@ -732,10 +732,12 @@ void Fuzzer::MutateAndTestOne() {
       StartTraceRecording();
     II.NumExecutedMutations++;
     if (size_t NumFeatures = RunOne(CurrentUnitData, Size)) {
-      Corpus.AddToCorpus({CurrentUnitData, CurrentUnitData + Size}, NumFeatures,
-                         /*MayDeleteFile=*/true);
-      ReportNewCoverage(&II, {CurrentUnitData, CurrentUnitData + Size});
-      CheckExitOnSrcPosOrItem();
+      if (!Options.Benchmark) {
+        Corpus.AddToCorpus({CurrentUnitData, CurrentUnitData + Size}, NumFeatures,
+                           /*MayDeleteFile=*/true);
+        ReportNewCoverage(&II, {CurrentUnitData, CurrentUnitData + Size});
+        CheckExitOnSrcPosOrItem();
+      }
     }
     StopTraceRecording();
     TryDetectingAMemoryLeak(CurrentUnitData, Size,
