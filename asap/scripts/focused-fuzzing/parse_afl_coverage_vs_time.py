@@ -18,7 +18,7 @@ ANCESTRY_RE = re.compile(r'ANCESTRY: ([0-9a-f]+) -> ([0-9a-f]+) execs: (\d+) sec
 MAP_RE = re.compile(r'^(\d+):(\d+)$')
 
 def parse_logs(f):
-    """Parses LibFuzzer logs from the given file object `f`.
+    """Parses AFL logs from the given file object `f`.
 
     Retrieves a list of timestamps together with the unit that was discovered
     at that time, and the number of executions.

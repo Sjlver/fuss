@@ -75,21 +75,22 @@ VARIANTS="${VARIANTS:-icalls edge nocoverage noasan nochecks nopoison noquaranti
 FUZZER_EXTRA_CORPORA=${FUZZER_EXTRA_CORPORA:-}
 FUZZER_EXTRA_ARGS=${FUZZER_EXTRA_ARGS:-}
 
-# Download and build LLVM's libFuzzer
+# Build LLVM's libFuzzer
 init_libfuzzer() {
   mkdir -p logs
   mkdir -p perf-data
 
-  if ! [ -d Fuzzer-src ]; then
-    git clone git@github.com:dslab-epfl/asap-libfuzzer.git Fuzzer-src
-    (cd Fuzzer-src && git checkout release_39)
+  local fuzzer_src="$(llvm-config --src-root)/lib/Fuzzer"
+  if ! [ -d "$fuzzer_src" ]; then
+    echo "Could not find LibFuzzer sources (searching in \"$fuzzer_src\")" >&2
+    exit 1
   fi
 
   if ! [ -f Fuzzer-build/libFuzzer.a ]; then
     mkdir Fuzzer-build
     cd Fuzzer-build
-    for i in ../Fuzzer-src/*.cpp; do
-      "$CXX" $LIBFUZZER_CFLAGS -c $i -I../Fuzzer-src &
+    for i in "$fuzzer_src"/*.cpp; do
+      "$CXX" $LIBFUZZER_CFLAGS -c "$i" -I"$fuzzer_src" &
     done
     wait
     ar ruv libFuzzer.a *.o
