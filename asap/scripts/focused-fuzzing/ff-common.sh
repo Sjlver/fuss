@@ -31,6 +31,12 @@ COVERAGE_ICALLS_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-ca
 COVERAGE_EDGE_CFLAGS="-fsanitize=address -fsanitize-coverage=edge"
 COVERAGE_EDGE_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge"
 
+COVERAGE_NONE_CFLAGS="-fsanitize=address"
+COVERAGE_NONE_LDFLAGS="-fsanitize=address"
+
+COVERAGE_ONLY_CFLAGS="-fsanitize-coverage=edge"
+COVERAGE_ONLY_LDFLAGS="-fsanitize-coverage=edge"
+
 SANITIZE_NOCHECKS_CFLAGS="-mllvm -asan-instrument-reads=0 -mllvm -asan-instrument-writes=0 -mllvm -asan-globals=0 -mllvm -asan-stack=0"
 SANITIZE_NOPOISON_OPTIONS="poison_heap=0"
 SANITIZE_NOQUARANTINE_OPTIONS="quarantine_size=0"
@@ -63,7 +69,7 @@ FUSS_TOTAL_SECONDS=${FUSS_TOTAL_SECONDS:-3600}
 
 # Which thresholds and variants should we test?
 THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1}"
-VARIANTS="${VARIANTS:-icalls edge nochecks nopoison noquarantine noinstrumentation}"
+VARIANTS="${VARIANTS:-icalls edge nocoverage noasan nochecks nopoison noquarantine noelastic noinstrumentation}"
 
 # Scripts can override this to use extra fuzzing args and corpora
 FUZZER_EXTRA_CORPORA=${FUZZER_EXTRA_CORPORA:-}
@@ -202,6 +208,14 @@ build_all() {
     build_target_and_fuzzer "asan-edge" "$COVERAGE_EDGE_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_EDGE_LDFLAGS"
   fi
 
+  if echo "$VARIANTS" | grep -q nocoverage; then
+    build_target_and_fuzzer "asan-nocoverage" "$COVERAGE_NONE_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_NONE_LDFLAGS"
+  fi
+
+  if echo "$VARIANTS" | grep -q noasan; then
+    build_target_and_fuzzer "asan-noasan" "$COVERAGE_ONLY_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_ONLY_LDFLAGS"
+  fi
+
   if echo "$VARIANTS" | grep -q nochecks; then
     build_target_and_fuzzer "asan-nochecks" "$COVERAGE_COUNTERS_CFLAGS $SANITIZE_NOCHECKS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_COUNTERS_LDFLAGS"
   fi
@@ -214,8 +228,12 @@ build_all() {
     build_target_and_fuzzer "asan-noquarantine" "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_COUNTERS_LDFLAGS"
   fi
 
+  if echo "$VARIANTS" | grep -q noelastic; then
+    build_target_and_fuzzer "asan-noelastic" "$COVERAGE_NONE_CFLAGS $SANITIZE_NOCHECKS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_NONE_LDFLAGS"
+  fi
+
   if echo "$VARIANTS" | grep -q noinstrumentation; then
-    build_target_and_fuzzer "asan-noinstrumentation" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_COUNTERS_LDFLAGS"
+    build_target_and_fuzzer "asan-noinstrumentation" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_ONLY_LDFLAGS"
   fi
 }
 
@@ -245,6 +263,9 @@ test_all() {
     elif [ "$variant" = "noinstrumentation" ]; then
       mkdir -p "target-asan-noinstrumentation-build/CORPUS-$run_id"
       FUZZER_EXTRA_ARGS="-prune_corpus=0" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-noinstrumentation"
+    elif [ "$variant" = "noelastic" ]; then
+      mkdir -p "target-asan-noelastic-build/CORPUS-$run_id"
+      FUZZER_EXTRA_ARGS="-prune_corpus=0" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-noelastic"
     else
       test_fuzzer "asan-$variant"
     fi
