@@ -21,6 +21,8 @@ class Ancestry(object):
             re.MULTILINE)
     ANCESTRY_RE = re.compile(r'^ANCESTRY: ([a-fA-F\d]{40}) -> ([a-fA-F\d]{40})$',
             re.MULTILINE)
+    NEW_PC_RE = re.compile(r'NEW_PC: (0x[0-9a-f]+) tc: ([a-fA-F\d]{40})',
+            re.MULTILINE)
 
     def __init__(self):
         self.ancestry = None
@@ -30,6 +32,12 @@ class Ancestry(object):
         self.info = {}
         self.lvl = {}
         self.root = None
+
+    def is_valid(self):
+        return len(self.info) > 0
+
+    def get_info(self):
+        return self.info
 
     def build_tree(self):
         for parent, child in self.ancestry:
@@ -51,9 +59,13 @@ class Ancestry(object):
         else:
             line_ancestry = " " * self.lvl[parent] + \
                     "-" * (self.lvl[shasum] - self.lvl[parent])
-            (index, cov, execs, action) = self.info[shasum]
+            (index, cov, execs, action, pcs) = self.info[shasum]
             line = line_ancestry + "| {:<8d} {:40s} cov: {:>8d} exec/s: {:>8d} {:20s}".format(
                     int(index), shasum, int(cov), int(execs), action)
+            print("{{{")
+            for pc in pcs:
+                line = " " * 29 + "| {:10s}".format(pc)
+            print("}}}")
         print(line)
         print("{{{")
         if shasum in self.kids:
@@ -64,6 +76,7 @@ class Ancestry(object):
     def parse(self, data):
         self.testcases = Ancestry.TESTCASE_RE.findall(data)
         self.ancestry = Ancestry.ANCESTRY_RE.findall(data)
+        pcs = Ancestry.NEW_PC_RE.findall(data)
         assert len(self.testcases) == len(self.ancestry)
 
         self.build_tree()
@@ -80,7 +93,11 @@ class Ancestry(object):
                 self.tree[parent] = None
                 self.root = parent
 
-            self.info[child] = (index, cov, execs, tc[-1])
+            self.info[child] = (index, cov, execs, tc[-1], [])
+
+        for i in range(len(pcs)):
+            pc, testcase = pcs[i]
+            self.info[testcase][-1].append(pc)
 
         self.print_tree(self.root)
 
