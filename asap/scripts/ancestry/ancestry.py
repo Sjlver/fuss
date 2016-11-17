@@ -17,11 +17,11 @@ import re
 import sys
 
 class Ancestry(object):
-    TESTCASE_RE = re.compile(r'^#(\d+)\s+NEW\s+cov: (\d+) bits: (\d+) (?:indir: (\d+) )?units: (\d+) exec/s: (\d+) secs: (\d+) L: (\d+) MS: (\d+) (.*)',
+    TESTCASE_RE = re.compile(r'^#(\d+)\s+NEW\s+cov: (\d+) (?:bits: (\d+) )?(?:indir: (\d+) )?units: (\d+) exec/s: (\d+) secs: (\d+) L: (\d+) MS: (\d+) (.*)',
             re.MULTILINE)
     ANCESTRY_RE = re.compile(r'^ANCESTRY: ([a-fA-F\d]{40}) -> ([a-fA-F\d]{40})$',
             re.MULTILINE)
-    NEW_PC_RE = re.compile(r'NEW_PC: (0x[0-9a-f]+) tc: ([a-fA-F\d]{40})',
+    NEW_PC_RE = re.compile(r'NEW_PC: (0x[0-9a-f]+) tc: ([a-fA-F\d]{40})?',
             re.MULTILINE)
 
     def __init__(self):
@@ -54,18 +54,18 @@ class Ancestry(object):
             print("The input stream does not look like fuzzing log")
             return
         parent = self.tree[shasum]
+        (index, cov, execs, action, pcs) = self.info[shasum]
         if not parent:
             line = "ROOT | {:40s}".format(shasum)
         else:
             line_ancestry = " " * self.lvl[parent] + \
                     "-" * (self.lvl[shasum] - self.lvl[parent])
-            (index, cov, execs, action, pcs) = self.info[shasum]
-            line = line_ancestry + "| {:<8d} {:40s} cov: {:>8d} exec/s: {:>8d} {:20s}".format(
+            line = line_ancestry + "| {:<8d} {:40s} cov: {:>8d} exec/s: {:>8d} {:20s}\n".format(
                     int(index), shasum, int(cov), int(execs), action)
-            print("{{{")
-            for pc in pcs:
-                line = " " * 29 + "| {:10s}".format(pc)
-            print("}}}")
+        print("{{{")
+        for pc in pcs:
+            line += " " * 29 + "| {:10s}\n".format(pc)
+        print("}}}")
         print(line)
         print("{{{")
         if shasum in self.kids:
@@ -92,11 +92,14 @@ class Ancestry(object):
             if parent not in self.tree:
                 self.tree[parent] = None
                 self.root = parent
+                self.info[self.root] = (0, 0, 0, "", [])
 
             self.info[child] = (index, cov, execs, tc[-1], [])
 
         for i in range(len(pcs)):
             pc, testcase = pcs[i]
+            if not testcase:
+                testcase = self.root
             self.info[testcase][-1].append(pc)
 
         self.print_tree(self.root)
