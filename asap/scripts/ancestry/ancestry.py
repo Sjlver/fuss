@@ -15,6 +15,7 @@ Usage VIM:
 
 import re
 import sys
+import subprocess
 
 class Ancestry(object):
     TESTCASE_RE = re.compile(r'^#(\d+)\s+NEW\s+cov: (\d+) (?:bits: (\d+) )?(?:indir: (\d+) )?units: (\d+) exec/s: (\d+) secs: (\d+) L: (\d+) MS: (\d+) (.*)',
@@ -56,16 +57,17 @@ class Ancestry(object):
         parent = self.tree[shasum]
         (index, cov, execs, action, pcs) = self.info[shasum]
         if not parent:
-            line = "ROOT | {:40s}".format(shasum)
+            line = "ROOT | {:40s}\n".format(shasum)
         else:
             line_ancestry = " " * self.lvl[parent] + \
                     "-" * (self.lvl[shasum] - self.lvl[parent])
             line = line_ancestry + "| {:<8d} {:40s} cov: {:>8d} exec/s: {:>8d} {:20s}\n".format(
                     int(index), shasum, int(cov), int(execs), action)
-        print("{{{")
-        for pc in pcs:
-            line += " " * 29 + "| {:10s}\n".format(pc)
-        print("}}}")
+        line += "{{{\n"
+        for (filename, linenumber, column) in pcs:
+            line += " " * 29 + "| {:40s} : {:<8d}\n".format(filename, int(linenumber))
+        line += "}}}\n"
+
         print(line)
         print("{{{")
         if shasum in self.kids:
@@ -73,10 +75,25 @@ class Ancestry(object):
                 self.print_tree(kid)
         print("}}}")
 
+    def convert_pcs(self, pcs):
+        # transform [pc] into {pc:(file, line_nr, column)}
+        result = {}
+        input_stream = "\n".join(pcs)
+        llvm_symbolizer = subprocess.Popen(['llvm-symbolizer', '-obj=fuzzer', '-functions=none'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        out = llvm_symbolizer.communicate(input=input_stream.encode())[0]
+
+        out = out.decode().rsplit()
+
+        for (pc, info) in zip(pcs, out):
+            filename, linenumber, column = info.split(":")
+            result[pc] = (filename, linenumber, column)
+
+        return result
+
     def parse(self, data):
         self.testcases = Ancestry.TESTCASE_RE.findall(data)
         self.ancestry = Ancestry.ANCESTRY_RE.findall(data)
-        pcs = Ancestry.NEW_PC_RE.findall(data)
+        pcdata = Ancestry.NEW_PC_RE.findall(data)
         assert len(self.testcases) == len(self.ancestry)
 
         self.build_tree()
@@ -96,11 +113,12 @@ class Ancestry(object):
 
             self.info[child] = (index, cov, execs, tc[-1], [])
 
-        for i in range(len(pcs)):
-            pc, testcase = pcs[i]
+        pcs = [pc for (pc, tc) in pcdata]
+        pcs_symbolized = self.convert_pcs(pcs)
+        for (pc, testcase)  in pcdata:
             if not testcase:
                 testcase = self.root
-            self.info[testcase][-1].append(pc)
+            self.info[testcase][-1].append(pcs_symbolized[pc])
 
         self.print_tree(self.root)
 
