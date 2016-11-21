@@ -15,6 +15,9 @@ VIM usage:
 
 import re
 import sys
+import os
+sys.path.insert(0, os.path.abspath('.'))
+from ancestry import Ancestry
 
 class Annotator(object):
     FUNCTION_RE = re.compile(r'^AsapPass: ran on (\w+) at ([^:]+):(\d+)',
@@ -82,6 +85,12 @@ class Annotator(object):
             total_cost, removed_cost, total_cost - removed_cost,
             cost_level))
 
+
+    def pc_hash(self, pc):
+        (filename, linenumber, _) = pc
+        filename = filename.split('/')[-1]
+        return filename + ":" + linenumber
+
     def print_details(self, line_checks):
         if not line_checks:
             return
@@ -95,7 +104,23 @@ class Annotator(object):
         print("}}}")
 
 
-    def annotate_files(self):
+    def print_testcases(self, ancestry_map, current_line_number, current_file_name):
+        key = self.pc_hash((current_file_name, str(current_line_number), 0))
+
+        if not key in ancestry_map:
+            return
+        testcases = ancestry_map[key]
+
+        if not testcases:
+            return
+
+        print("{{{")
+        for testcase in testcases:
+            testcase_info = 29 * " " + "| testcase checksum: {:40s}".format(testcase)
+            print(testcase_info)
+        print("}}}")
+
+    def annotate_files(self, ancestry):
         # Sort checks / functions by file name and line number
         self.checks.sort(key=lambda c: (c[1], c[2], c[3]))
         self.functions.sort(key=lambda f: (f[1], f[2], f[0]))
@@ -103,6 +128,18 @@ class Annotator(object):
         current_file_name = None
         function_index = 0
         check_index = 0
+
+        ancestry_map = {}
+        if ancestry.is_valid():
+            info = ancestry.get_info()
+            for (key, value) in info.items():
+                (_, _, _, _, pcs) = value
+                for pc in pcs:
+                    current_key = self.pc_hash(pc)
+                    if not current_key in ancestry_map:
+                        ancestry_map[current_key] = []
+                    ancestry_map[current_key].append(key)
+
 
         print("//! ASAP Summary report")
         self.print_stats(*self.compute_stats(self.checks))
@@ -112,54 +149,62 @@ class Annotator(object):
             assert current_file_name != self.checks[check_index][1]
             current_file_name = self.checks[check_index][1]
 
-            with open(current_file_name) as f:
-                print("//! File: {}".format(current_file_name))
-                self.print_stats(*self.compute_stats(
-                    c for c in self.checks if c[1] == current_file_name))
+            print("//! File: {}".format(current_file_name))
+            self.print_stats(*self.compute_stats(
+                c for c in self.checks if c[1] == current_file_name))
 
-                for line_number, line in enumerate(f):
-                    # Fast-forward to the right check/function
-                    while check_index < len(self.checks) and \
-                            self.checks[check_index][1] == current_file_name and \
-                            self.checks[check_index][2] < line_number + 1:
-                        check_index += 1
-                    while function_index < len(self.functions) and \
-                            self.functions[function_index][1] == current_file_name and \
-                            self.functions[function_index][2] < line_number + 1:
-                        function_index += 1
+            try:
+                with open(current_file_name) as f:
+                    for line_number, line in enumerate(f):
+                        # Fast-forward to the right check/function
+                        while check_index < len(self.checks) and \
+                                self.checks[check_index][1] == current_file_name and \
+                                self.checks[check_index][2] < line_number + 1:
+                            check_index += 1
+                        while function_index < len(self.functions) and \
+                                self.functions[function_index][1] == current_file_name and \
+                                self.functions[function_index][2] < line_number + 1:
+                            function_index += 1
 
-                    if function_index < len(self.functions) and \
-                            line_number + 1 == self.functions[function_index][2] and \
-                            current_file_name == self.functions[function_index][1]:
-                        print("//! Function: {}".format(self.functions[function_index][0]))
-                        self.print_stats(*self.compute_stats(
-                            c for c in self.checks if c[0] == self.functions[function_index][0]))
+                        if function_index < len(self.functions) and \
+                                line_number + 1 == self.functions[function_index][2] and \
+                                current_file_name == self.functions[function_index][1]:
+                            print("//! Function: {}".format(self.functions[function_index][0]))
+                            self.print_stats(*self.compute_stats(
+                                c for c in self.checks if c[0] == self.functions[function_index][0]))
 
-                    line_checks = []
-                    while check_index < len(self.checks) and \
-                            line_number + 1 == self.checks[check_index][2] and \
-                            current_file_name == self.checks[check_index][1]:
-                        line_checks.append(self.checks[check_index])
-                        check_index += 1
-                    line_checks.sort(key=lambda c: c[5])
+                        line_checks = []
+                        while check_index < len(self.checks) and \
+                                line_number + 1 == self.checks[check_index][2] and \
+                                current_file_name == self.checks[check_index][1]:
+                            line_checks.append(self.checks[check_index])
+                            check_index += 1
+                        line_checks.sort(key=lambda c: c[5])
 
-                    if len(line_checks) > 1:
-                        check_summary = "".join("!" if c[4] == "removing" else "." for c in line_checks)
-                        if len(check_summary) > 10:
-                            check_summary = check_summary[:9] + "+"
-                        check_info = "{:10s} {:>8d}-{:<8d} | {:<5d} ".format(
-                                check_summary,
-                                line_checks[0][5], line_checks[-1][5], line_number + 1)
-                    elif len(line_checks) == 1:
-                        check_info = "{:10s} {:^17d} | {:<5d} ".format(
-                                "!" if line_checks[0][4] == "removing" else ".",
-                                line_checks[0][5], line_number + 1)
-                    else:
-                        check_info = " " * 29 + "| {:<5d}".format(line_number + 1) + " "
+                        if len(line_checks) > 1:
+                            check_summary = "".join("!" if c[4] == "removing" else "." for c in line_checks)
+                            if len(check_summary) > 10:
+                                check_summary = check_summary[:9] + "+"
+                            check_info = "{:10s} {:>8d}-{:<8d} | {:<5d} ".format(
+                                    check_summary,
+                                    line_checks[0][5], line_checks[-1][5], line_number + 1)
+                        elif len(line_checks) == 1:
+                            check_info = "{:10s} {:^17d} | {:<5d} ".format(
+                                    "!" if line_checks[0][4] == "removing" else ".",
+                                    line_checks[0][5], line_number + 1)
+                        else:
+                            check_info = " " * 29 + "| {:<5d}".format(line_number + 1) + " "
 
-                    print(check_info + line.rstrip())
-                    #after printing the line, print the sanity checks information
-                    self.print_details(line_checks)
+                        print(check_info + line.rstrip())
+                        #after printing the line, print the sanity checks information
+                        self.print_details(line_checks)
+                        self.print_testcases(ancestry_map, line_number + 1, current_file_name)
+            except IOError:
+                # Skip over the current file
+                while (check_index < len(self.checks) and
+                        current_file_name == self.checks[check_index][1]):
+                    check_index += 1
+
 
 def main():
     log_data = sys.stdin.read()
@@ -169,7 +214,11 @@ def main():
         annotator.parse_function(log_data[start:m.end()])
         start = m.end()
 
-    annotator.annotate_files()
+    ancestry = Ancestry()
+    if (len(sys.argv) == 2):
+        ancestry_log = open(sys.argv[1], "r").read()
+        ancestry.parse(ancestry_log)
+    annotator.annotate_files(ancestry)
 
 if __name__ == '__main__':
     main()

@@ -79,7 +79,7 @@ class Ancestry(object):
         # transform [pc] into {pc:(file, line_nr, column)}
         result = {}
         input_stream = "\n".join(pcs)
-        llvm_symbolizer = subprocess.Popen(['llvm-symbolizer', '-obj=fuzzer', '-functions=none'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        llvm_symbolizer = subprocess.Popen(['llvm-symbolizer', '-obj=/home/alex/jonas/target-asan-trace-build/fuzzer', '-functions=none'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         out = llvm_symbolizer.communicate(input=input_stream.encode())[0]
 
         out = out.decode().rsplit()
@@ -120,7 +120,7 @@ class Ancestry(object):
                 testcase = self.root
             self.info[testcase][-1].append(pcs_symbolized[pc])
 
-        self.print_tree(self.root)
+        #self.print_tree(self.root)
 
 
 
