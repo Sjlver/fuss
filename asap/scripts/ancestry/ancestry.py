@@ -16,6 +16,7 @@ Usage VIM:
 import re
 import sys
 import subprocess
+import argparse
 
 class Ancestry(object):
     TESTCASE_RE = re.compile(r'^#(\d+)\s+NEW\s+cov: (\d+) (?:bits: (\d+) )?(?:indir: (\d+) )?units: (\d+) exec/s: (\d+) secs: (\d+) L: (\d+) MS: (\d+) (.*)',
@@ -75,11 +76,14 @@ class Ancestry(object):
                 self.print_tree(kid)
         print("}}}")
 
-    def convert_pcs(self, pcs):
-        # transform [pc] into {pc:(file, line_nr, column)}
+    # transform [pc] into {pc:(file, line_nr, column)}
+    def convert_pcs(self, pcs, elf_path):
+        if not elf_path:
+            return {}
+
         result = {}
         input_stream = "\n".join(pcs)
-        llvm_symbolizer = subprocess.Popen(['llvm-symbolizer', '-obj=/home/alex/jonas/target-asan-trace-build/fuzzer', '-functions=none'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        llvm_symbolizer = subprocess.Popen(['llvm-symbolizer', '-obj=' + elf_path, '-functions=none'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         out = llvm_symbolizer.communicate(input=input_stream.encode())[0]
 
         out = out.decode().rsplit()
@@ -90,7 +94,7 @@ class Ancestry(object):
 
         return result
 
-    def parse(self, data):
+    def parse(self, data, elf_path=''):
         self.testcases = Ancestry.TESTCASE_RE.findall(data)
         self.ancestry = Ancestry.ANCESTRY_RE.findall(data)
         pcdata = Ancestry.NEW_PC_RE.findall(data)
@@ -114,11 +118,12 @@ class Ancestry(object):
             self.info[child] = (index, cov, execs, tc[-1], [])
 
         pcs = [pc for (pc, tc) in pcdata]
-        pcs_symbolized = self.convert_pcs(pcs)
+        pcs_symbolized = self.convert_pcs(pcs, elf_path)
         for (pc, testcase)  in pcdata:
             if not testcase:
                 testcase = self.root
-            self.info[testcase][-1].append(pcs_symbolized[pc])
+            if pc in pcs_symbolized:
+                self.info[testcase][-1].append(pcs_symbolized[pc])
 
         #self.print_tree(self.root)
 
@@ -127,7 +132,13 @@ class Ancestry(object):
 def main():
     log_data = sys.stdin.read()
     ancestry = Ancestry()
-    ancestry.parse(log_data)
+
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("--elf", default="")
+    args = vars(arg_parser.parse_args(sys.argv[1:]))
+
+    ancestry.parse(log_data, args["elf"])
+    ancestry.print_tree(ancestry.root)
 
 if __name__ == '__main__':
     main()

@@ -218,12 +218,13 @@ def main():
 
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("--ancestry", default="")
+    arg_parser.add_argument("--elf", default="")
     args = vars(arg_parser.parse_args(sys.argv[1:]))
 
     ancestry = Ancestry()
     if args["ancestry"]:
         ancestry_log = open(args["ancestry"]).read()
-        ancestry.parse(ancestry_log)
+        ancestry.parse(ancestry_log, args["elf"])
     annotator.annotate_files(ancestry)
 
 if __name__ == '__main__':
