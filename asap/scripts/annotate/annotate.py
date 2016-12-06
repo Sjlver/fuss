@@ -16,6 +16,8 @@ VIM usage:
 import re
 import sys
 import os
+import argparse
+
 sys.path.insert(0, os.path.abspath('.'))
 from ancestry import Ancestry
 
@@ -214,9 +216,13 @@ def main():
         annotator.parse_function(log_data[start:m.end()])
         start = m.end()
 
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("--ancestry", default="")
+    args = vars(arg_parser.parse_args(sys.argv[1:]))
+
     ancestry = Ancestry()
-    if (len(sys.argv) == 2):
-        ancestry_log = open(sys.argv[1], "r").read()
+    if args["ancestry"]:
+        ancestry_log = open(args["ancestry"]).read()
         ancestry.parse(ancestry_log)
     annotator.annotate_files(ancestry)
 
