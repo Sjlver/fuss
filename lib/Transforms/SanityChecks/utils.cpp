@@ -14,6 +14,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
@@ -205,7 +206,11 @@ void printDebugLoc(const DebugLoc &DbgLoc, LLVMContext &Ctx,
     return;
   }
 
-  StringRef Filename = DL->getFilename();
+  SmallString<128> Filename(DL->getFilename());
+  if (sys::fs::make_absolute(Filename)) {
+    // Ignore this error; a relative path is better than nothing.
+    Filename = DL->getFilename();
+  }
   Outs << Filename << ':' << DL->getLine();
 
   if (DL->getColumn() != 0) {
