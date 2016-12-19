@@ -124,7 +124,7 @@ test_fuzzer() {
     cd "target-${name}-build"
     mkdir -p "CORPUS-${run_id}"
     "./fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
-      -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
+      -print_pcs=1 -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
       -artifact_prefix="CORPUS-${run_id}/" \
       $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
       | tee -a "../logs/fuzzer-${name}-${run_id}.log"
@@ -148,7 +148,7 @@ profile_fuzzer() {
       cd "target-${name}-build"
       perf record $perf_args -o "../perf-data/perf-${name}.data" \
         "./fuzzer" -max_total_time=$FUZZER_PROFILING_SECONDS \
-        -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
+        -print_pcs=1 -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
         -artifact_prefix="CORPUS-${run_id}/" \
         $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
         | tee -a "../logs/perf-${name}.log"
@@ -469,7 +469,7 @@ do_longrun() {
   cd "target-longrun-${longrun_threshold}-build"
   mkdir -p "CORPUS"
   "./fuzzer" \
-    -jobs=1000 $workers -print_final_stats=1 -max_len=$MAX_LEN \
+    -jobs=1000 $workers -print_pcs=1 -print_final_stats=1 -max_len=$MAX_LEN \
     "CORPUS" "$GLOBAL_CORPUS"
   cd ..
 }
@@ -499,7 +499,7 @@ do_benchmark() {
       printf "%30s\t" "$version"
       ASAN_OPTIONS="$ASAN_OPTIONS:$extra_asan_options" ./target-${version}-build/fuzzer \
         -max_total_time=$FUZZER_BENCHMARKING_SECONDS \
-        -print_final_stats=1 -benchmark=1 "$corpus_for_benchmark" 2>&1 | \
+        -print_pcs=1 -print_final_stats=1 -benchmark=1 "$corpus_for_benchmark" 2>&1 | \
         grep stat::number_of_executed_units | grep -o '[0-9]\+'
     done
   ) | tee "logs/benchmark-${run_id}.log"
