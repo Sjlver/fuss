@@ -263,10 +263,10 @@ test_all() {
       ASAN_OPTIONS="$ASAN_OPTIONS:$SANITIZE_NOQUARANTINE_OPTIONS" test_fuzzer "asan-noquarantine"
     elif [ "$variant" = "noinstrumentation" ]; then
       mkdir -p "target-asan-noinstrumentation-build/CORPUS-$run_id"
-      FUZZER_EXTRA_ARGS="-prune_corpus=0" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-noinstrumentation"
+      FUZZER_EXTRA_ARGS="-benchmark=1" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-noinstrumentation"
     elif [ "$variant" = "noelastic" ]; then
       mkdir -p "target-asan-noelastic-build/CORPUS-$run_id"
-      FUZZER_EXTRA_ARGS="-prune_corpus=0" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-noelastic"
+      FUZZER_EXTRA_ARGS="-benchmark=1" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-noelastic"
     else
       test_fuzzer "asan-$variant"
     fi
