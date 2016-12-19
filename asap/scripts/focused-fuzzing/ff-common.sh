@@ -22,8 +22,8 @@ LIBFUZZER_CFLAGS="-O3 -g -Wall -std=c++11"
 DEFAULT_CFLAGS="-O3 -g -Wall -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
 DEFAULT_LDFLAGS=""
 
-COVERAGE_COUNTERS_CFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters"
-COVERAGE_COUNTERS_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters"
+COVERAGE_COUNTERS_CFLAGS="-fsanitize=address -fsanitize-coverage=trace-pc-guard,indirect-calls"
+COVERAGE_COUNTERS_LDFLAGS="-fsanitize=address -fsanitize-coverage=trace-pc-guard,indirect-calls"
 
 COVERAGE_ICALLS_CFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls"
 COVERAGE_ICALLS_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls"
@@ -34,8 +34,8 @@ COVERAGE_EDGE_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge"
 COVERAGE_NONE_CFLAGS="-fsanitize=address"
 COVERAGE_NONE_LDFLAGS="-fsanitize=address"
 
-COVERAGE_ONLY_CFLAGS="-fsanitize-coverage=edge"
-COVERAGE_ONLY_LDFLAGS="-fsanitize-coverage=edge"
+COVERAGE_ONLY_CFLAGS="-fsanitize-coverage=trace-pc-guard,indirect-calls"
+COVERAGE_ONLY_LDFLAGS="-fsanitize-coverage=trace-pc-guard,indirect-calls"
 
 SANITIZE_NOCHECKS_CFLAGS="-mllvm -asan-instrument-reads=0 -mllvm -asan-instrument-writes=0 -mllvm -asan-globals=0 -mllvm -asan-stack=0"
 SANITIZE_NOPOISON_OPTIONS="poison_heap=0"
@@ -286,12 +286,12 @@ print_summary() {
   echo "======="
   echo
   (
-    printf "%20s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\n" "name" "cov" "bits" "execs" "execs_per_sec" "units" "actual_cov" "actual_bits"
+    printf "%20s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\n" "name" "cov" "ft" "execs" "execs_per_sec" "units" "actual_cov" "actual_ft"
 
     for name in $summary_versions; do
-      # Get cov, bits from the last output line
+      # Get cov, ft from the last output line
       cov="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}-${run_id}.log | (grep -o 'cov: [0-9]*' || echo "cov: 0") | grep -o '[0-9]*' | sort -n | tail -n1)"
-      bits="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}-${run_id}.log | (grep -o 'bits: [0-9]*' || echo "bits: 0") | grep -o '[0-9]*' | sort -n | tail -n1)"
+      ft="$(grep '#[0-9]*.*DONE' logs/fuzzer-${name}-${run_id}.log | (grep -o 'ft: [0-9]*' || echo "ft: 0") | grep -o '[0-9]*' | sort -n | tail -n1)"
 
       # Get units and execs/s from the final stats
       execs="$(grep 'stat::number_of_executed_units:' logs/fuzzer-${name}-${run_id}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
@@ -300,9 +300,9 @@ print_summary() {
 
       # Get actual coverage from running the corpus against the PGO version
       actual_cov="$(grep '#[0-9]*.*DONE' logs/coverage-${name}-${run_id}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
-      actual_bits="$(grep '#[0-9]*.*DONE' logs/coverage-${name}-${run_id}.log | grep -o 'bits: [0-9]*' | grep -o '[0-9]*')"
+      actual_ft="$(grep '#[0-9]*.*DONE' logs/coverage-${name}-${run_id}.log | grep -o 'ft: [0-9]*' | grep -o '[0-9]*')"
 
-      printf "%20s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\n" "$name" "$cov" "$bits" "$execs" "$execs_per_sec" "$units" "$actual_cov" "$actual_bits"
+      printf "%20s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\n" "$name" "$cov" "$ft" "$execs" "$execs_per_sec" "$units" "$actual_cov" "$actual_ft"
     done
   ) | tee "logs/summary-${run_id}.log"
 }

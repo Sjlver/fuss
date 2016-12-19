@@ -470,8 +470,13 @@ void Fuzzer::ShuffleAndMinimize(UnitVector *InitialCorpus) {
     // When Benchmarking, add every unit to the corpus initially, and keep the
     // corpus unchanged henceforth.
     size_t NumFeatures = RunOne(U);
-    if (Options.Benchmark)
+    if (Options.Benchmark && NumFeatures == 0) {
+      if (TPC.UsingTracePcGuard()) {
+        for (size_t i = 0; !Corpus.AddFeature(i, U.size(), Options.Shrink); ++i)
+          ;
+      }
       NumFeatures = 1;
+    }
 
     if (NumFeatures) {
       CheckExitOnSrcPosOrItem();
