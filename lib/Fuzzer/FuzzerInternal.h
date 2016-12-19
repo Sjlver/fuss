@@ -175,10 +175,6 @@ private:
   static thread_local bool IsMyThread;
 
   bool InMergeMode = false;
-
-  // Stores the hash of the testcase being mutated. Used to log the corpus
-  // ancestry tree.
-  std::string ParentHash;
 };
 
 }; // namespace fuzzer
