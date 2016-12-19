@@ -19,11 +19,13 @@ import subprocess
 import argparse
 
 class Ancestry(object):
-    TESTCASE_RE = re.compile(r'^#(\d+)\s+NEW\s+cov: (\d+) (?:bits: (\d+) )?(?:indir: (\d+) )?units: (\d+) exec/s: (\d+) secs: (\d+) L: (\d+) MS: (\d+) (.*)',
+    # 12 NEW    cov: 3 ft: 3 corp: 2/2b exec/s: 0 rss: 24Mb secs: 0 L: 1 MS: 1 ChangeBit-
+    TESTCASE_RE = re.compile(r'^#(\d+)\s+NEW\s+cov: (\d+) (?:ft: (\d+) )?(?:indir: (\d+) )?corp: (\d+)/\d+b exec/s: (\d+) rss: \S+ secs: (\d+) L: (\d+) MS: (\d+) (.*)',
             re.MULTILINE)
     ANCESTRY_RE = re.compile(r'^ANCESTRY: ([a-fA-F\d]{40}) -> ([a-fA-F\d]{40})$',
             re.MULTILINE)
-    NEW_PC_RE = re.compile(r'NEW_PC: (0x[0-9a-f]+) tc: ([a-fA-F\d]{40})?',
+    # NEW_PC: 0x41f58d in http_parser_execute /home/jowagner/asap/experiments/ff-http-parser/target-asap-10-build/../http-parser-src/http_parser.c:656:5
+    NEW_PC_RE = re.compile(r'NEW_PC: (0x[0-9a-f]+) in (\S+) ([^:]+):(\d+):(\d+)',
             re.MULTILINE)
 
     def __init__(self):
@@ -76,28 +78,23 @@ class Ancestry(object):
                 self.print_tree(kid)
         print("}}}")
 
-    # transform [pc] into {pc:(file, line_nr, column)}
-    def convert_pcs(self, pcs, elf_path):
-        if not elf_path:
-            return {}
-
-        result = {}
-        input_stream = "\n".join(pcs)
-        llvm_symbolizer = subprocess.Popen(['llvm-symbolizer', '-obj=' + elf_path, '-functions=none'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        out = llvm_symbolizer.communicate(input=input_stream.encode())[0]
-
-        out = out.decode().rsplit()
-
-        for (pc, info) in zip(pcs, out):
-            filename, linenumber, column = info.split(":")
-            result[pc] = (filename, linenumber, column)
-
-        return result
-
     def parse(self, data, elf_path=''):
-        self.testcases = Ancestry.TESTCASE_RE.findall(data)
-        self.ancestry = Ancestry.ANCESTRY_RE.findall(data)
-        pcdata = Ancestry.NEW_PC_RE.findall(data)
+        self.testcases = []
+        self.ancestry = []
+        pcdata = []
+        for line in data.split('\n'):
+            m = Ancestry.TESTCASE_RE.search(line)
+            if m:
+                self.testcases.append(m.groups())
+            m = Ancestry.ANCESTRY_RE.search(line)
+            if m:
+                if m.group(1) != '0000000000000000000000000000000000000000':
+                    self.ancestry.append(m.groups())
+                last_testcase = m.group(2)
+            m = Ancestry.NEW_PC_RE.search(line)
+            if m:
+                pcdata.append((m.group(1), last_testcase, m.group(3), m.group(4), m.group(5)))
+
         assert len(self.testcases) == len(self.ancestry)
 
         self.build_tree()
@@ -117,13 +114,8 @@ class Ancestry(object):
 
             self.info[child] = (index, cov, execs, tc[-1], [])
 
-        pcs = [pc for (pc, tc) in pcdata]
-        pcs_symbolized = self.convert_pcs(pcs, elf_path)
-        for (pc, testcase)  in pcdata:
-            if not testcase:
-                testcase = self.root
-            if pc in pcs_symbolized:
-                self.info[testcase][-1].append(pcs_symbolized[pc])
+        for (pc, testcase, filename, line_number, column_number)  in pcdata:
+            self.info[testcase][-1].append((filename, line_number, column_number))
 
         #self.print_tree(self.root)
 
