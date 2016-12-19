@@ -467,7 +467,13 @@ void Fuzzer::ShuffleAndMinimize(UnitVector *InitialCorpus) {
   ExecuteCallback(&dummy, 0);
 
   for (const auto &U : *InitialCorpus) {
-    if (size_t NumFeatures = RunOne(U)) {
+    // When Benchmarking, add every unit to the corpus initially, and keep the
+    // corpus unchanged henceforth.
+    size_t NumFeatures = RunOne(U);
+    if (Options.Benchmark)
+      NumFeatures = 1;
+
+    if (NumFeatures) {
       CheckExitOnSrcPosOrItem();
       Corpus.AddToCorpus(U, NumFeatures);
       if (Options.Verbosity >= 2)
