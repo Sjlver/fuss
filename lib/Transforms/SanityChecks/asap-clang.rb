@@ -221,7 +221,8 @@ class AsapInitialCompiler < BaseCompiler
         clang_args = insert_arg(clang_args, '-gline-tables-only')
         clang_args = insert_arg(clang_args, '-flto')
         clang_args = ['-Xclang', '-femit-coverage-notes',
-                      '-Xclang', "-coverage-file=#{gcno_name}"] + clang_args
+                      '-Xclang', "-coverage-notes-file=#{gcno_name}",
+                      '-Xclang', "-coverage-data-file=#{gcda_name}"] + clang_args
 
         run!(clang, *clang_args)
 
