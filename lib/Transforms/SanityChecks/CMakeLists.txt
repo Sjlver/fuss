@@ -3,21 +3,23 @@
 
 add_llvm_library(LLVMSanityChecks
   AsapPass.cpp
+  AsapPassBase.cpp
   CostModel.cpp
   ExitInsteadOfAbort.cpp
   GCOV.cpp
   OverheadEstimation.cpp
-  SanityCheckCost.cpp
+  SanityCheckCoverageCost.cpp
+  SanityCheckGcovCost.cpp
   SanityCheckInstructions.cpp
-  SanityChecks.cpp
   SanityCheckSampledCost.cpp
+  SanityChecks.cpp
   utils.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/Transforms/SanityChecks
   )
 
-add_dependencies(LLVMSanityChecks LLVMInstrumentation)
+add_dependencies(LLVMSanityChecks LLVMInstrumentation LLVMSymbolize)
 
 # Create symlinks for asap-clang.rb
 add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/bin/asap-clang

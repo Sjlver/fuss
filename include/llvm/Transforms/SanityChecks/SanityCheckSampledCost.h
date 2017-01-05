@@ -1,6 +1,10 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
+#ifndef LLVM_TRANSFORMS_SANITYCHECKS_SANITYCHECKSAMPLEDCOST_H
+#define LLVM_TRANSFORMS_SANITYCHECKS_SANITYCHECKSAMPLEDCOST_H
+
+#include "llvm/Transforms/SanityChecks/SanityCheckCost.h"
 #include "llvm/Pass.h"
 
 #include <utility>
@@ -12,28 +16,23 @@ class Instruction;
 class raw_ostream;
 }
 
-struct SanityCheckSampledCost : public llvm::FunctionPass {
+// Determines the cost of a check based on data from a sampling profiler.
+struct SanityCheckSampledCost : public llvm::FunctionPass, public SanityCheckCost {
   static char ID;
 
   SanityCheckSampledCost() : FunctionPass(ID) {
     initializeSanityCheckSampledCostPass(*llvm::PassRegistry::getPassRegistry());
   }
 
-  virtual bool runOnFunction(llvm::Function &F);
+  virtual bool runOnFunction(llvm::Function &F) override;
 
-  virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
+  virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override;
 
-  virtual void print(llvm::raw_ostream &O, const llvm::Module *M) const;
-
-  // A pair that stores a sanity check and its cost.
-  typedef std::pair<llvm::Instruction *, uint64_t> CheckCost;
-
-  const std::vector<CheckCost> &getCheckCosts() const { return CheckCosts; };
+  virtual void print(llvm::raw_ostream &O, const llvm::Module *M) const override;
 
 private:
-  // Checks in the current function, with their cost.
-  std::vector<CheckCost> CheckCosts;
-
   // Estimates the execution count for the given instruction
   double getExecutionCount(const llvm::Instruction *I, const llvm::BlockFrequencyInfo &BFI) const;
 };
+
+#endif

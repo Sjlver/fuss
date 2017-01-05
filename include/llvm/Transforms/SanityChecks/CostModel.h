@@ -1,6 +1,9 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
+#ifndef LLVM_TRANSFORMS_SANITYCHECKS_COSTMODEL_H
+#define LLVM_TRANSFORMS_SANITYCHECKS_COSTMODEL_H
+
 namespace llvm {
 class Instruction;
 class TargetTransformInfo;
@@ -14,3 +17,5 @@ namespace sanitychecks {
 unsigned getInstructionCost(const llvm::Instruction *I,
                             const llvm::TargetTransformInfo *TTI);
 } // namespace sanitychecks
+
+#endif

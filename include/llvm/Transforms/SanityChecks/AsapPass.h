@@ -1,36 +1,56 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
-#include "llvm/Pass.h"
+#ifndef LLVM_TRANSFORMS_SANITYCHECKS_ASAPPASS_H
+#define LLVM_TRANSFORMS_SANITYCHECKS_ASAPPASS_H
 
-namespace llvm {
-class Instruction;
-}
+#include "llvm/Transforms/SanityChecks/AsapPassBase.h"
 
-struct SanityCheckSampledCost;
-struct SanityCheckInstructions;
-
-struct AsapPass : public llvm::FunctionPass {
+// The default instantiation of ASAP. Estimates cost using a sampling profiler.
+struct AsapPass : public llvm::FunctionPass, public AsapPassBase {
   static char ID;
 
-  AsapPass() : FunctionPass(ID), SCC(0), SCI(0) {
+  AsapPass() : FunctionPass(ID) {
     initializeAsapPassPass(*llvm::PassRegistry::getPassRegistry());
   }
 
-  virtual bool runOnFunction(llvm::Function &F);
+  virtual bool runOnFunction(llvm::Function &F) override;
 
-  virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
-
-private:
-  SanityCheckSampledCost *SCC;
-  SanityCheckInstructions *SCI;
-
-  // Tries to remove a sanity check; returns true if it worked.
-  bool optimizeCheckAway(llvm::Instruction *Inst);
-
-  // Writes information about a sanity check to the given stream.
-  void logSanityCheck(llvm::Instruction *Inst, llvm::StringRef Action,
-                      llvm::raw_ostream &Outs) const;
+  virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override;
 };
 
 llvm::FunctionPass *createAsapPass();
+
+
+// An instantiation of ASAP using cost information from GCOV.
+struct AsapGcovPass : public llvm::FunctionPass, public AsapPassBase {
+  static char ID;
+
+  AsapGcovPass() : FunctionPass(ID) {
+    initializeAsapGcovPassPass(*llvm::PassRegistry::getPassRegistry());
+  }
+
+  virtual bool runOnFunction(llvm::Function &F) override;
+
+  virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override;
+};
+
+llvm::FunctionPass *createAsapGcovPass();
+
+
+// An instantiation of ASAP using cost information from covered PCs.
+struct AsapCoveragePass : public llvm::FunctionPass, public AsapPassBase {
+  static char ID;
+
+  AsapCoveragePass() : FunctionPass(ID) {
+    initializeAsapCoveragePassPass(*llvm::PassRegistry::getPassRegistry());
+  }
+
+  virtual bool runOnFunction(llvm::Function &F) override;
+
+  virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override;
+};
+
+llvm::FunctionPass *createAsapCoveragePass();
+
+#endif

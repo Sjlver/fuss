@@ -1,6 +1,9 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
+#ifndef LLVM_TRANSFORMS_SANITYCHECKS_SANITYCHECKINSTRUCTIONS_H
+#define LLVM_TRANSFORMS_SANITYCHECKS_SANITYCHECKINSTRUCTIONS_H
+
 #include "utils.h"
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -83,3 +86,5 @@ private:
   void getDominanceFrontier(llvm::BasicBlock *BB, const llvm::DominatorTree &DT,
                             llvm::SmallPtrSet<llvm::BasicBlock *, 8> &Result);
 };
+
+#endif

@@ -1,7 +1,7 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
-#include "llvm/Transforms/SanityChecks/SanityCheckCost.h"
+#include "llvm/Transforms/SanityChecks/SanityCheckGcovCost.h"
 #include "llvm/Transforms/SanityChecks/SanityCheckInstructions.h"
 #include "llvm/Transforms/SanityChecks/CostModel.h"
 #include "llvm/Transforms/SanityChecks/utils.h"
@@ -36,13 +36,13 @@ bool largerCost(const SanityCheckCost::CheckCost &a,
 }
 } // anonymous namespace
 
-bool SanityCheckCost::doInitialization(Module &M) {
+bool SanityCheckGcovCost::doInitialization(Module &M) {
   GF = createGCOVFile();
   return false;
 }
 
-bool SanityCheckCost::runOnFunction(Function &F) {
-  DEBUG(dbgs() << "SanityCheckCost on " << F.getName() << "\n");
+bool SanityCheckGcovCost::runOnFunction(Function &F) {
+  DEBUG(dbgs() << "SanityCheckGcovCost on " << F.getName() << "\n");
   CheckCosts.clear();
 
   TargetTransformInfoWrapperPass &TTIWP =
@@ -105,13 +105,13 @@ bool SanityCheckCost::runOnFunction(Function &F) {
   return false;
 }
 
-void SanityCheckCost::getAnalysisUsage(AnalysisUsage &AU) const {
+void SanityCheckGcovCost::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<TargetTransformInfoWrapperPass>();
   AU.addRequired<SanityCheckInstructions>();
   AU.setPreservesAll();
 }
 
-void SanityCheckCost::print(raw_ostream &O, const Module *M) const {
+void SanityCheckGcovCost::print(raw_ostream &O, const Module *M) const {
   O << "                Cost Location\n";
   for (const CheckCost &I : CheckCosts) {
     O << format("%20llu ", I.second);
@@ -121,7 +121,7 @@ void SanityCheckCost::print(raw_ostream &O, const Module *M) const {
   }
 }
 
-std::unique_ptr<sanitychecks::GCOVFile> SanityCheckCost::createGCOVFile() {
+std::unique_ptr<sanitychecks::GCOVFile> SanityCheckGcovCost::createGCOVFile() {
   std::unique_ptr<sanitychecks::GCOVFile> GF(new sanitychecks::GCOVFile);
   if (!GF) {
     report_fatal_error("Out of memory when allocating a GCOVFile");
@@ -156,10 +156,10 @@ std::unique_ptr<sanitychecks::GCOVFile> SanityCheckCost::createGCOVFile() {
   return GF;
 }
 
-char SanityCheckCost::ID = 0;
-INITIALIZE_PASS_BEGIN(SanityCheckCost, "sanity-check-cost",
+char SanityCheckGcovCost::ID = 0;
+INITIALIZE_PASS_BEGIN(SanityCheckGcovCost, "sanity-check-gcov-cost",
                       "Finds costs of sanity checks", false, false)
 INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(SanityCheckInstructions)
-INITIALIZE_PASS_END(SanityCheckCost, "sanity-check-cost",
+INITIALIZE_PASS_END(SanityCheckGcovCost, "sanity-check-gcov-cost",
                     "Finds costs of sanity checks", false, false)

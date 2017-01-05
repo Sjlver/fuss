@@ -27,8 +27,8 @@
 using namespace llvm;
 
 namespace {
-bool largerCost(const SanityCheckSampledCost::CheckCost &a,
-                const SanityCheckSampledCost::CheckCost &b) {
+bool largerCost(const SanityCheckCost::CheckCost &a,
+                const SanityCheckCost::CheckCost &b) {
   return a.second > b.second;
 }
 

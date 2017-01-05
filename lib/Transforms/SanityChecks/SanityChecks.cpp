@@ -8,9 +8,12 @@ using namespace llvm;
 
 void llvm::initializeSanityChecks(PassRegistry &Registry) {
   initializeAsapPassPass(Registry);
+  initializeAsapCoveragePassPass(Registry);
+  initializeAsapGcovPassPass(Registry);
   initializeExitInsteadOfAbortPass(Registry);
   initializeOverheadEstimationPass(Registry);
-  initializeSanityCheckCostPass(Registry);
+  initializeSanityCheckGcovCostPass(Registry);
+  initializeSanityCheckCoverageCostPass(Registry);
   initializeSanityCheckInstructionsPass(Registry);
   initializeSanityCheckSampledCostPass(Registry);
 }

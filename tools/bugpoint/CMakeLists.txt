@@ -12,6 +12,7 @@ set(LLVM_LINK_COMPONENTS
   SanityChecks
   ScalarOpts
   Support
+  Symbolize
   Target
   TransformUtils
   Vectorize

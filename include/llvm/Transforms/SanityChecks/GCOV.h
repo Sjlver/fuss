@@ -18,8 +18,8 @@
 // GcovBuffers can be released before GCOV data use has finished.
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_SUPPORT_GCOV_H
-#define LLVM_SUPPORT_GCOV_H
+#ifndef LLVM_TRANSFORMS_SANITYCHECKS_GCOV_H
+#define LLVM_TRANSFORMS_SANITYCHECKS_GCOV_H
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/iterator.h"

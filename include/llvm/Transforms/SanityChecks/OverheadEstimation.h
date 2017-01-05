@@ -1,6 +1,9 @@
 // This file is part of ASAP.
 // Please see LICENSE.txt for copyright and licensing information.
 
+#ifndef LLVM_TRANSFORMS_SANITYCHECKS_OVERHEADESTIMATION_H
+#define LLVM_TRANSFORMS_SANITYCHECKS_OVERHEADESTIMATION_H
+
 #include "llvm/Pass.h"
 
 namespace sanitychecks {
@@ -25,3 +28,5 @@ struct OverheadEstimation : public llvm::ModulePass {
 private:
   SanityCheckInstructions *SCI;
 };
+
+#endif

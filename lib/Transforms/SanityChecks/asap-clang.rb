@@ -338,8 +338,8 @@ class AsapOptimizingCompiler < BaseCompiler
     opt_level = get_optlevel_for_llc(cmd)
     FileUtils.mkdir_p(File.dirname(log_name))
     run!(find_opt(),
-         '-asap',
-         '-print-removed-checks',
+         '-asap-gcov',
+         '-asap-verbose',
          "-asap-cost-threshold=#{@cost_threshold}",
          "-gcda=#{gcda_name}", "-gcno=#{gcno_name}",
          '-o', asap_name, orig_name,
@@ -369,7 +369,7 @@ def compute_costs(state)
     FileUtils.mkdir_p(File.dirname(costs_name))
 
     run!(find_opt(),
-         '-analyze', '-sanity-check-cost',
+         '-analyze', '-sanity-check-gcov-cost',
          "-gcda=#{gcda_name}", "-gcno=#{gcno_name}", orig_name,
          :out => costs_name)
   end
