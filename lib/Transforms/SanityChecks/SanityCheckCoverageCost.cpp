@@ -17,8 +17,10 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/LineIterator.h"
+#include "llvm/Support/Regex.h"
 
 #include <algorithm>
 #include <map>
@@ -31,6 +33,7 @@ using namespace llvm;
 
 namespace {
 const std::string kInvalidFileName("<invalid>");
+Regex kPCLineRegex("^[ \t]*(NEW_PC: )?(0x[0-9a-f]+)");
 
 // FIXME: This class is only here to support the transition to llvm::Error. It
 // will be removed once this transition is complete. Clients should prefer to
@@ -90,14 +93,16 @@ bool SanityCheckCoverageCost::runOnFunction(Function &F) {
 
   SanityCheckInstructions &SCI = getAnalysis<SanityCheckInstructions>();
 
-  for (auto &DIII: CoveredLocations) {
-    dbgs() << "Covered: ";
-    for (uint32_t i = 0, e = DIII.getNumberOfFrames(); i < e; ++i) {
-      auto IIFrame = DIII.getFrame(i);
-      dbgs() << IIFrame.FileName << ":" << IIFrame.Line << ":" << IIFrame.Column << ":" << IIFrame.Discriminator << " ";
-    }
-    dbgs() << "\n";
-  }
+  DEBUG({
+      for (auto &DIII: CoveredLocations) {
+        dbgs() << "Covered: ";
+        for (uint32_t i = 0, e = DIII.getNumberOfFrames(); i < e; ++i) {
+          auto IIFrame = DIII.getFrame(i);
+          dbgs() << IIFrame.FileName << ":" << IIFrame.Line << ":" << IIFrame.Column << ":" << IIFrame.Discriminator << " ";
+        }
+        dbgs() << "\n";
+      }
+  });
 
   for (Instruction *Inst : SCI.getSanityCheckRoots()) {
     assert(Inst->getParent()->getParent() == &F &&
@@ -106,22 +111,24 @@ bool SanityCheckCoverageCost::runOnFunction(Function &F) {
     // The cost of a check is one if it has the same debug location as a PC in
     // `PCFile`, otherwise zero.
     double Cost = 0;
-    dbgs() << "Check instruction " << *Inst << "\n";
+    DEBUG(dbgs() << "Check instruction " << *Inst << "\n");
     if (DebugLoc Loc = Inst->getDebugLoc()) {
       if (DILocation *DIL = Loc.get()) {
-        dbgs() << "Looking for " << DIL->getFilename() << ":" << DIL->getLine() << ":" << DIL->getColumn() << ":" << DIL->getDiscriminator();
-        for (auto DIP = DIL->getInlinedAt(); DIP; DIP = DIP->getInlinedAt()) {
-          dbgs() << " " << DIP->getFilename() << ":" << DIP->getLine() << ":" << DIP->getColumn() << ":" << DIP->getDiscriminator();
-        }
-        dbgs() << " ...\n";
+        DEBUG({
+            dbgs() << "Looking for " << DIL->getFilename() << ":" << DIL->getLine() << ":" << DIL->getColumn() << ":" << DIL->getDiscriminator();
+            for (auto DIP = DIL->getInlinedAt(); DIP; DIP = DIP->getInlinedAt()) {
+              dbgs() << " " << DIP->getFilename() << ":" << DIP->getLine() << ":" << DIP->getColumn() << ":" << DIP->getDiscriminator();
+            }
+            dbgs() << " ...\n";
+        });
 
         if (std::any_of(CoveredLocations.begin(), CoveredLocations.end(), [this, DIL](const DIInliningInfo &DIII) {
               return locationsMatch(*DIL, DIII);
               })) {
           Cost = 1;
-          dbgs() << "found";
+          DEBUG(dbgs() << "found");
         }
-        dbgs() << "\n";
+        DEBUG(dbgs() << "\n");
       }
     }
 
@@ -169,23 +176,27 @@ bool SanityCheckCoverageCost::loadCoverage(const Module &M) {
   std::unique_ptr<MemoryBuffer> Buffer = std::move(BufOrErr.get());
   line_iterator LineIt(*Buffer, /*SkipBlanks=*/true, '#');
   for (; !LineIt.is_at_eof(); ++LineIt) {
-    uint64_t Offset;
-    if (LineIt->getAsInteger(0, Offset)) {
-      M.getContext().diagnose(DiagnosticInfoSampleProfile(
-          PCFile, LineIt.line_number(), "Could not parse PC: " + *LineIt));
-      return false;
-    }
+    SmallVector<StringRef, 3> Matches;
+    if (kPCLineRegex.match(*LineIt, &Matches)) {
+      uint64_t Offset;
+      if (Matches[2].getAsInteger(0, Offset)) {
+        M.getContext().diagnose(DiagnosticInfoSampleProfile(
+            PCFile, LineIt.line_number(), "Could not parse PC: " + *LineIt));
+        return false;
+      }
 
-    auto ResOrErr = Symbolizer.symbolizeInlinedCode(ModuleName, Offset);
-    if (!ResOrErr) {
-      M.getContext().diagnose(DiagnosticInfoSampleProfile(
-          PCFile, LineIt.line_number(), "Could not symbolize PC: " + *LineIt));
-      return false;
-    }
+      auto ResOrErr = Symbolizer.symbolizeInlinedCode(ModuleName, Offset);
+      if (!ResOrErr) {
+        M.getContext().diagnose(DiagnosticInfoSampleProfile(
+            PCFile, LineIt.line_number(), "Could not symbolize PC: " + *LineIt));
+        return false;
+      }
 
-    auto Res = ResOrErr.get();
-    if (Res.getNumberOfFrames() && Res.getFrame(0).FileName != kInvalidFileName) {
-      CoveredLocations.push_back(Res);
+      auto Res = ResOrErr.get();
+      if (Res.getNumberOfFrames() && Res.getFrame(0).FileName != kInvalidFileName) {
+        DEBUG(dbgs() << "Covered! " << Matches[2] << " " << Res.getFrame(0).FileName << ":" << Res.getFrame(0).Line << "\n");
+        CoveredLocations.push_back(Res);
+      }
     }
   }
 
@@ -205,7 +216,7 @@ bool SanityCheckCoverageCost::locationsMatch(const DILocation &DIL, const DIInli
     // debug info in the binary does not preserve column numbers and
     // discriminators for inlined instructions. Thus we only take these values
     // into account if they are non-zero.
-    if (/**/IIFrame.FileName != LocFrame->getFilename()
+    if (/**/!sys::fs::equivalent(IIFrame.FileName, LocFrame->getFilename())
          || IIFrame.Line != LocFrame->getLine()
          || (IIFrame.Column != 0 && LocFrame->getColumn() != 0
            && IIFrame.Column != LocFrame->getColumn())

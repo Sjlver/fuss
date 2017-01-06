@@ -236,6 +236,12 @@ build_all() {
   if echo "$VARIANTS" | grep -q noinstrumentation; then
     build_target_and_fuzzer "asan-noinstrumentation" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" "$COVERAGE_ONLY_LDFLAGS"
   fi
+
+  if echo "$VARIANTS" | grep -q asapcoverage; then
+    build_target_and_fuzzer "asan-asapcoverage" \
+      "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asapcoverage -mllvm -asap-cost-threshold=1 -mllvm -asap-verbose -mllvm -asap-module-name=$WORK_DIR/target-asan-build/fuzzer -mllvm -asap-coverage-file=$WORK_DIR/logs/fuzzer-asan-${run_id}.log " \
+      "$COVERAGE_COUNTERS_LDFLAGS"
+  fi
 }
 
 # Test all versions that have been built by build_all
