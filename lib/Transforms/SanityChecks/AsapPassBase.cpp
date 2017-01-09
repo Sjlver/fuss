@@ -11,6 +11,7 @@
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Format.h"
@@ -122,19 +123,31 @@ void AsapPassBase::logSanityCheck(Instruction *Inst, StringRef Action,
                               raw_ostream &Outs) const {
   DebugLoc DL = getInstrumentationDebugLoc(Inst);
   printDebugLoc(DL, Inst->getContext(), Outs);
-  Outs << ": " << Action << " sanity check with cost "
-       << *Inst->getMetadata("cost")->getOperand(0);
+
+  ConstantAsMetadata *CostMD = cast<ConstantAsMetadata>(Inst->getMetadata("cost")->getOperand(0));
+  uint64_t Cost = cast<ConstantInt>(CostMD->getValue())->getZExtValue();
+  Outs << ": asap action:" << Action << " cost:" << Cost;
+
+  if (auto *CI = dyn_cast<CallInst>(Inst)) {
+    Outs << " type:" << CI->getCalledFunction()->getName();
+  } else if (isa<StoreInst>(Inst)) {
+    // For the moment, the only other recognized instrumentation type is sancov
+    // counter increments; blindly assume it's that one.
+    Outs << " type:__sancov_gen_cov_counter";
+  } else {
+    assert(false && "Unrecognized instrumentation type.");
+  }
 
   if (DL) {
     if (MDNode *IA = DL.getInlinedAt()) {
-      Outs << " (inlined at ";
+      Outs << " inlined:";
       printDebugLoc(DebugLoc(IA), Inst->getContext(), Outs);
-      Outs << ")";
+      while ((IA = DebugLoc(IA).getInlinedAt())) {
+        Outs << ",";
+        printDebugLoc(DebugLoc(IA), Inst->getContext(), Outs);
+      }
     }
   }
 
-  if (auto *CI = dyn_cast<CallInst>(Inst)) {
-    Outs << " " << CI->getCalledFunction()->getName();
-  }
   Outs << "\n";
 }

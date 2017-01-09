@@ -211,11 +211,8 @@ void printDebugLoc(const DebugLoc &DbgLoc, LLVMContext &Ctx,
     // Ignore this error; a relative path is better than nothing.
     Filename = DL->getFilename();
   }
-  Outs << Filename << ':' << DL->getLine();
-
-  if (DL->getColumn() != 0) {
-    Outs << ':' << DL->getColumn();
-  }
+  Outs << Filename << ':' << DL->getLine() << ":" << DL->getColumn() << ":"
+       << DL->getDiscriminator();
 }
 
 bool getRegionFromInstructionSet(const InstructionSet &instrs,

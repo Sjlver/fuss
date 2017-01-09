@@ -24,7 +24,8 @@ from ancestry import Ancestry
 class Annotator(object):
     FUNCTION_RE = re.compile(r'^AsapPass: ran on (\w+) at ([^:]+):(\d+)',
             re.MULTILINE)
-    CHECK_RE = re.compile(r'^([^:\n]+):(\d+):(\d+): (keeping|removing) sanity check with cost i64 (\d+)(?:\s(\w+))?',
+    # /path/file.c:560:11:2: asap action:keeping cost:0 type:__sanitizer_cov_trace_pc_guard inlined:/path/file.c:1117:13:0
+    CHECK_RE = re.compile(r'^([^:\n]+):(\d+):(\d+):\d\+ asap action:(keeping|removing) cost:(\d+)(?: type:(\w+))?',
             re.MULTILINE)
 
 
