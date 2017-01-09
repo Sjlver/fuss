@@ -32,6 +32,7 @@ void TracePC::HandleTrace(uint32_t *Guard, uintptr_t PC) {
   if (!Idx) return;
   PCs[Idx % kNumPCs] = PC;
   Counters[Idx % kNumCounters]++;
+  AllTimeCounters[Idx % kNumAllTimeCounters]++;
 }
 
 size_t TracePC::GetTotalPCCoverage() {
@@ -185,6 +186,15 @@ void TracePC::PrintCoverage() {
       Printf("UNCOVERED_FUNC: %s\n", Func.c_str());
     for (auto &File : UncoveredFiles)
       Printf("UNCOVERED_FILE: %s\n", File.c_str());
+  }
+}
+
+void TracePC::PrintAllTimeCounters() {
+  for (size_t i = 1; i < GetNumPCs(); i++) {
+    if (!PCs[i]) continue;
+
+    PrintPC("AllTimeCounter: %p %F %L", "AllTimeCounter: %p", PCs[i]);
+    Printf(" %lld\n", AllTimeCounters[i]);
   }
 }
 

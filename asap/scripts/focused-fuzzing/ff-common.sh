@@ -273,6 +273,9 @@ test_all() {
     elif [ "$variant" = "noelastic" ]; then
       mkdir -p "target-asan-noelastic-build/CORPUS-$run_id"
       FUZZER_EXTRA_ARGS="-benchmark=1" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-noelastic"
+    elif [ "$variant" = "asapcoverage" ]; then
+      mkdir -p "target-asan-asapcoverage-build/CORPUS-$run_id"
+      FUZZER_EXTRA_ARGS="-benchmark=1" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-asapcoverage"
     else
       test_fuzzer "asan-$variant"
     fi

@@ -70,6 +70,7 @@ class TracePC {
 
   void PrintModuleInfo();
 
+  void PrintAllTimeCounters();
   void PrintCoverage();
 
   void AddValueForMemcmp(void *caller_pc, const void *s1, const void *s2,
@@ -105,6 +106,9 @@ private:
 
   static const size_t kNumCounters = 1 << 14;
   alignas(8) uint8_t Counters[kNumCounters];
+
+  static const size_t kNumAllTimeCounters = 1 << 24;
+  uint64_t AllTimeCounters[kNumAllTimeCounters];
 
   static const size_t kNumPCs = 1 << 24;
   uintptr_t PCs[kNumPCs];
