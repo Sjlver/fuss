@@ -34,6 +34,7 @@ using namespace llvm;
 namespace {
 const std::string kInvalidFileName("<invalid>");
 Regex kPCLineRegex("^[ \t]*(NEW_PC: )?(0x[0-9a-f]+)");
+Regex kAllTimeCounterRegex("^AllTimeCounter: (0x[0-9a-f]+) .* ([0-9]+)$");
 
 // FIXME: This class is only here to support the transition to llvm::Error. It
 // will be removed once this transition is complete. Clients should prefer to
@@ -94,13 +95,14 @@ bool SanityCheckCoverageCost::runOnFunction(Function &F) {
   SanityCheckInstructions &SCI = getAnalysis<SanityCheckInstructions>();
 
   DEBUG({
-      for (auto &DIII: CoveredLocations) {
+      for (auto &CoveredLocation: CoveredLocations) {
+        auto &DIII = CoveredLocation.first;
         dbgs() << "Covered: ";
         for (uint32_t i = 0, e = DIII.getNumberOfFrames(); i < e; ++i) {
           auto IIFrame = DIII.getFrame(i);
           dbgs() << IIFrame.FileName << ":" << IIFrame.Line << ":" << IIFrame.Column << ":" << IIFrame.Discriminator << " ";
         }
-        dbgs() << "\n";
+        dbgs() << "cost: " << CoveredLocation.second << "\n";
       }
   });
 
@@ -110,7 +112,7 @@ bool SanityCheckCoverageCost::runOnFunction(Function &F) {
 
     // The cost of a check is one if it has the same debug location as a PC in
     // `PCFile`, otherwise zero.
-    double Cost = 0;
+    uint64_t Cost = 0;
     DEBUG(dbgs() << "Check instruction " << *Inst << "\n");
     if (DebugLoc Loc = Inst->getDebugLoc()) {
       if (DILocation *DIL = Loc.get()) {
@@ -122,22 +124,23 @@ bool SanityCheckCoverageCost::runOnFunction(Function &F) {
             dbgs() << " ...\n";
         });
 
-        if (std::any_of(CoveredLocations.begin(), CoveredLocations.end(), [this, DIL](const DIInliningInfo &DIII) {
-              return locationsMatch(*DIL, DIII);
-              })) {
-          Cost = 1;
+        auto CoveredLocation = std::find_if(CoveredLocations.begin(), CoveredLocations.end(), [this, DIL](const std::pair<DIInliningInfo, uint64_t> &CL) {
+              return locationsMatch(*DIL, CL.first);
+              });
+        if (CoveredLocation != CoveredLocations.end()) {
+          Cost = CoveredLocation->second;
           DEBUG(dbgs() << "found");
         }
         DEBUG(dbgs() << "\n");
       }
     }
 
-    APInt CountInt = APInt(64, (uint64_t)Cost);
+    APInt CountInt = APInt(64, Cost);
     MDNode *MD = MDNode::get(
         F.getContext(), {ConstantAsMetadata::get(ConstantInt::get(
                             Type::getInt64Ty(F.getContext()), CountInt))});
     Inst->setMetadata("cost", MD);
-    CheckCosts.push_back(std::make_pair(Inst, (uint64_t)Cost));
+    CheckCosts.push_back(std::make_pair(Inst, Cost));
   }
 
   std::sort(CheckCosts.begin(), CheckCosts.end(), largerCost);
@@ -171,32 +174,51 @@ bool SanityCheckCoverageCost::loadCoverage(const Module &M) {
     return false;
   }
 
-  symbolize::LLVMSymbolizer Symbolizer;
-
   std::unique_ptr<MemoryBuffer> Buffer = std::move(BufOrErr.get());
   line_iterator LineIt(*Buffer, /*SkipBlanks=*/true, '#');
+  std::map<uint64_t, uint64_t> Costs;
   for (; !LineIt.is_at_eof(); ++LineIt) {
     SmallVector<StringRef, 3> Matches;
+    uint64_t Offset = 0;
+    uint64_t Cost = 0;
     if (kPCLineRegex.match(*LineIt, &Matches)) {
-      uint64_t Offset;
       if (Matches[2].getAsInteger(0, Offset)) {
         M.getContext().diagnose(DiagnosticInfoSampleProfile(
             PCFile, LineIt.line_number(), "Could not parse PC: " + *LineIt));
         return false;
       }
-
-      auto ResOrErr = Symbolizer.symbolizeInlinedCode(ModuleName, Offset);
-      if (!ResOrErr) {
+      Cost = 1;
+    } else if (kAllTimeCounterRegex.match(*LineIt, &Matches)) {
+      if (Matches[1].getAsInteger(0, Offset)) {
         M.getContext().diagnose(DiagnosticInfoSampleProfile(
-            PCFile, LineIt.line_number(), "Could not symbolize PC: " + *LineIt));
+            PCFile, LineIt.line_number(), "Could not parse PC: " + *LineIt));
         return false;
       }
-
-      auto Res = ResOrErr.get();
-      if (Res.getNumberOfFrames() && Res.getFrame(0).FileName != kInvalidFileName) {
-        DEBUG(dbgs() << "Covered! " << Matches[2] << " " << Res.getFrame(0).FileName << ":" << Res.getFrame(0).Line << "\n");
-        CoveredLocations.push_back(Res);
+      if (Matches[2].getAsInteger(0, Cost)) {
+        M.getContext().diagnose(DiagnosticInfoSampleProfile(
+            PCFile, LineIt.line_number(), "Could not parse Cost: " + *LineIt));
+        return false;
       }
+    }
+
+    if (Offset) {
+      Costs[Offset] += Cost;
+    }
+  }
+
+  symbolize::LLVMSymbolizer Symbolizer;
+  for (auto OffsetAndCost: Costs) {
+    auto ResOrErr = Symbolizer.symbolizeInlinedCode(ModuleName, OffsetAndCost.first);
+    if (!ResOrErr) {
+      M.getContext().diagnose(DiagnosticInfoSampleProfile(
+          PCFile, LineIt.line_number(), "Could not symbolize PC: " + *LineIt));
+      return false;
+    }
+
+    auto Res = ResOrErr.get();
+    if (Res.getNumberOfFrames() && Res.getFrame(0).FileName != kInvalidFileName) {
+      DEBUG(dbgs() << "Covered! " << Res.getFrame(0).FileName << ":" << Res.getFrame(0).Line << "\n");
+      CoveredLocations.push_back(std::make_pair(Res, OffsetAndCost.second));
     }
   }
 

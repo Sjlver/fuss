@@ -69,7 +69,7 @@ FUSS_TOTAL_SECONDS=${FUSS_TOTAL_SECONDS:-3600}
 
 # Which thresholds and variants should we test?
 THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1}"
-VARIANTS="${VARIANTS:-icalls edge nocoverage noasan nochecks nopoison noquarantine noelastic noinstrumentation}"
+VARIANTS="${VARIANTS:-icalls edge nocoverage noasan nochecks nopoison noquarantine noelastic noinstrumentation asapcoverage}"
 
 # Scripts can override this to use extra fuzzing args and corpora
 FUZZER_EXTRA_CORPORA=${FUZZER_EXTRA_CORPORA:-}
@@ -174,7 +174,7 @@ compute_coverage() {
   fi
 }
 
-# Generate and test initial, pgo, and thresholded versions
+# Generate initial, pgo, and thresholded versions
 build_all() {
   # Initial build; simply AddressSanitizer, no PGO, no ASAP.
   build_target_and_fuzzer "asan" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
@@ -239,13 +239,21 @@ build_all() {
 
   if echo "$VARIANTS" | grep -q asapcoverage; then
     build_target_and_fuzzer "asan-asapcoverage" \
-      "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asapcoverage -mllvm -asap-cost-threshold=1 -mllvm -asap-verbose -mllvm -asap-module-name=$WORK_DIR/target-asan-build/fuzzer -mllvm -asap-coverage-file=$WORK_DIR/logs/fuzzer-asan-${run_id}.log " \
+      "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asapcoverage -mllvm -asap-cost-threshold=100000 -mllvm -asap-verbose -mllvm -asap-module-name=$WORK_DIR/target-asan-build/fuzzer -mllvm -asap-coverage-file=$WORK_DIR/logs/perf-asan.log " \
       "$COVERAGE_COUNTERS_LDFLAGS"
   fi
 }
 
 # Test all versions that have been built by build_all
 test_all() {
+  # At the start of testing, set all corpora to those of the initial build.
+  # This ensures each version can start with the same non-zero initial corpus.
+  for i in target-*-build; do
+    if [ "$i" != "target-asan-build" ]; then
+      rsync -a --delete "target-asan-build/CORPUS-$run_id/" "$i/CORPUS-$run_id"
+    fi
+  done
+
   # Test the initial build.
   test_fuzzer "asan"
   compute_coverage "asan"
@@ -268,14 +276,9 @@ test_all() {
     elif [ "$variant" = "noquarantine" ]; then
       ASAN_OPTIONS="$ASAN_OPTIONS:$SANITIZE_NOQUARANTINE_OPTIONS" test_fuzzer "asan-noquarantine"
     elif [ "$variant" = "noinstrumentation" ]; then
-      mkdir -p "target-asan-noinstrumentation-build/CORPUS-$run_id"
       FUZZER_EXTRA_ARGS="-benchmark=1" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-noinstrumentation"
     elif [ "$variant" = "noelastic" ]; then
-      mkdir -p "target-asan-noelastic-build/CORPUS-$run_id"
       FUZZER_EXTRA_ARGS="-benchmark=1" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-noelastic"
-    elif [ "$variant" = "asapcoverage" ]; then
-      mkdir -p "target-asan-asapcoverage-build/CORPUS-$run_id"
-      FUZZER_EXTRA_ARGS="-benchmark=1" FUZZER_EXTRA_CORPORA="$WORK_DIR/target-asan-build/CORPUS-$run_id" test_fuzzer "asan-asapcoverage"
     else
       test_fuzzer "asan-$variant"
     fi

@@ -38,7 +38,7 @@ template <>
 struct is_error_code_enum<sanity_check_cost_error> : std::true_type {};
 }
 
-// Determines the cost of a check based on data from a sampling profiler.
+// Determines the cost of a check based on data from fuzzer output.
 struct SanityCheckCoverageCost : public llvm::FunctionPass, public SanityCheckCost {
   static char ID;
 
@@ -57,9 +57,9 @@ struct SanityCheckCoverageCost : public llvm::FunctionPass, public SanityCheckCo
   virtual void print(llvm::raw_ostream &O, const llvm::Module *M) const override;
 
 private:
-  // The set of locations that have been covered, as a vector of
-  // DIInliningInfos.
-  std::vector<llvm::DIInliningInfo> CoveredLocations;
+  // The set of locations that have been covered, as a vector of pairs of
+  // DIInliningInfos and costs.
+  std::vector<std::pair<llvm::DIInliningInfo, uint64_t>> CoveredLocations;
 
   // Loads coverage info from a file containing program counters, and builds a
   // list of symbolized debug locations. Returns true on success.
