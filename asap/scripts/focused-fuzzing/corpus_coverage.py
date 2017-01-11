@@ -57,7 +57,10 @@ def cheap_cover(complete, parts):
         v = min(uncovered, key=lambda x: complete[x])
         available_parts = [p for p in parts if v in p]
         available_parts.sort(key=remaining_cost)
-        assert available_parts, "Value {} not covered by any part?".format(v)
+        if not available_parts:
+            print("Warning; Value 0x{:x} not covered by any part?".format(v), file=sys.stderr)
+            uncovered.remove(v)
+            continue
         cover.add(v)
         uncovered.difference_update(available_parts[-1].keys())
 

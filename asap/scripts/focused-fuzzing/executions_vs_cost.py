@@ -125,11 +125,18 @@ def main():
     plt.scatter(atom_execs, atom_costs, color=atom_colors, alpha=0.5)
     plt.xlabel('Executions')
     plt.ylabel('Cost')
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlim((1, 1e10))
+    plt.ylim((1, 1e6))
     if args.output:
         plt.savefig(args.output)
     else:
         plt.show()
     
+    # Dump the data for debugging:
+    for loc, cost, execs, action in sorted(atoms, key=lambda a: a[2]):
+        print("{} {:12d} {:12d} {}".format(action, cost, execs, loc), file=sys.stderr)
 
 if __name__ == '__main__':
     main()
