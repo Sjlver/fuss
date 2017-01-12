@@ -239,7 +239,7 @@ build_all() {
 
   if echo "$VARIANTS" | grep -q asapcoverage; then
     build_target_and_fuzzer "asan-asapcoverage" \
-      "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asapcoverage -mllvm -asap-cost-threshold=100000 -mllvm -asap-verbose -mllvm -asap-module-name=$WORK_DIR/target-asan-build/fuzzer -mllvm -asap-coverage-file=$WORK_DIR/logs/perf-asan.log " \
+      "$COVERAGE_COUNTERS_CFLAGS -fsanitize=asapcoverage -mllvm -asap-cost-threshold=100000 -mllvm -asap-verbose -mllvm -asap-module-name=$WORK_DIR/target-asan-build/fuzzer -mllvm -asap-coverage-file=$WORK_DIR/logs/perf-asan.log " \
       "$COVERAGE_COUNTERS_LDFLAGS"
   fi
 }

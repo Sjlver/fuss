@@ -9,11 +9,12 @@
 
 #include "llvm/DebugInfo/DIContext.h"
 
-#include <utility>
+#include <tuple>
 #include <vector>
 
 namespace llvm {
 class BlockFrequencyInfo;
+class CallInst;
 class Instruction;
 class raw_ostream;
 class DILocation;
@@ -42,7 +43,7 @@ struct is_error_code_enum<sanity_check_cost_error> : std::true_type {};
 struct SanityCheckCoverageCost : public llvm::FunctionPass, public SanityCheckCost {
   static char ID;
 
-  SanityCheckCoverageCost() : FunctionPass(ID) {
+  SanityCheckCoverageCost() : FunctionPass(ID), TracePCGuardIndexOffset(0) {
     initializeSanityCheckCoverageCostPass(*llvm::PassRegistry::getPassRegistry());
   }
 
@@ -57,13 +58,28 @@ struct SanityCheckCoverageCost : public llvm::FunctionPass, public SanityCheckCo
   virtual void print(llvm::raw_ostream &O, const llvm::Module *M) const override;
 
 private:
-  // The set of locations that have been covered, as a vector of pairs of
-  // DIInliningInfos and costs.
-  std::vector<std::pair<llvm::DIInliningInfo, uint64_t>> CoveredLocations;
+  // The set of locations that have been covered, as a vector of tuples
+  // containing the location's DIInliningInfo, index in the `trace_pc_guard`
+  // array, and cost.
+  std::vector<std::tuple<llvm::DIInliningInfo, size_t, uint64_t>> CoveredLocations;
+
+  // The offset of the `trace_pc_guard` indices in the current function
+  // relative to the indices in CoveredLocations.
+  size_t TracePCGuardIndexOffset;
 
   // Loads coverage info from a file containing program counters, and builds a
   // list of symbolized debug locations. Returns true on success.
   bool loadCoverage(const llvm::Module &M);
+
+  // Returns true if the given instruction is a call to `trace_pc_guard`.
+  bool isTracePCGuardCall(llvm::Instruction *I);
+
+  // Computes the `trace_pc_guard` index for the given call instruction.
+  size_t getTracePCGuardIndex(llvm::CallInst &I);
+
+  // Computes the `trace_pc_guard` index offset for the given function. Returns
+  // true on success.
+  bool computeTracePCGuardIndexOffset(llvm::Function &F);
 
   // Compares a DIInliningInfo and a DILocation, returning true if they match
   // (i.e., have the same source location and inlining stack).

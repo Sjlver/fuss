@@ -190,11 +190,31 @@ void TracePC::PrintCoverage() {
 }
 
 void TracePC::PrintAllTimeCounters() {
+  if (!UsingTracePcGuard()) return;
+
+  // Keep track of the module and module-relative index of each PC.
+  size_t ModuleNumber = 0;
+  size_t ModulesCumulativeSize = 0;
+  size_t ModuleSize = Modules[ModuleNumber].Stop - Modules[ModuleNumber].Start;
+
   for (size_t i = 1; i < GetNumPCs(); i++) {
+    while (i - 1 >= ModulesCumulativeSize + ModuleSize) {
+      ModulesCumulativeSize += ModuleSize;
+      ModuleNumber += 1;
+      ModuleSize = Modules[ModuleNumber].Stop - Modules[ModuleNumber].Start;
+    }
+
     if (!PCs[i]) continue;
 
-    PrintPC("AllTimeCounter: %p %F %L", "AllTimeCounter: %p", PCs[i]);
-    Printf(" %lld\n", AllTimeCounters[i]);
+    char ModulePathRaw[4096] = "";  // What's PATH_MAX in portable C++?
+    void *OffsetRaw = nullptr;
+    if (!EF->__sanitizer_get_module_and_offset_for_pc(
+            reinterpret_cast<void *>(PCs[i]), ModulePathRaw,
+            sizeof(ModulePathRaw), &OffsetRaw))
+      continue;
+
+    Printf("AllTimeCounter: %p %s %zd %lld\n", PCs[i], ModulePathRaw,
+           i - ModulesCumulativeSize, AllTimeCounters[i]);
   }
 }
 

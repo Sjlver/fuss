@@ -12,6 +12,7 @@
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
@@ -32,9 +33,10 @@
 using namespace llvm;
 
 namespace {
+const std::string kTracePcGuardName =
+    "__sanitizer_cov_trace_pc_guard";
 const std::string kInvalidFileName("<invalid>");
-Regex kPCLineRegex("^[ \t]*(NEW_PC: )?(0x[0-9a-f]+)");
-Regex kAllTimeCounterRegex("^AllTimeCounter: (0x[0-9a-f]+) .* ([0-9]+)$");
+Regex kAllTimeCounterRegex("^AllTimeCounter: (0x[0-9a-f]+) .* ([0-9]+) ([0-9]+)$");
 
 // FIXME: This class is only here to support the transition to llvm::Error. It
 // will be removed once this transition is complete. Clients should prefer to
@@ -94,44 +96,39 @@ bool SanityCheckCoverageCost::runOnFunction(Function &F) {
 
   SanityCheckInstructions &SCI = getAnalysis<SanityCheckInstructions>();
 
-  DEBUG({
+  //DEBUG({
       for (auto &CoveredLocation: CoveredLocations) {
-        auto &DIII = CoveredLocation.first;
+        auto &DIII = std::get<0>(CoveredLocation);
         dbgs() << "Covered: ";
         for (uint32_t i = 0, e = DIII.getNumberOfFrames(); i < e; ++i) {
           auto IIFrame = DIII.getFrame(i);
           dbgs() << IIFrame.FileName << ":" << IIFrame.Line << ":" << IIFrame.Column << ":" << IIFrame.Discriminator << " ";
         }
-        dbgs() << "cost: " << CoveredLocation.second << "\n";
+        dbgs() << "index: " << std::get<1>(CoveredLocation) << " ";
+        dbgs() << "cost: " << std::get<2>(CoveredLocation) << "\n";
       }
-  });
+  //});
+
+  if (!computeTracePCGuardIndexOffset(F)) {
+    dbgs() << "Warning: Could not compute trace_pc_guard index offset for function: " << F.getName() << "\n";
+    return false;
+  }
 
   for (Instruction *Inst : SCI.getSanityCheckRoots()) {
     assert(Inst->getParent()->getParent() == &F &&
            "SCI must only contain instructions of the current function.");
 
-    // The cost of a check is one if it has the same debug location as a PC in
-    // `PCFile`, otherwise zero.
+    // Compute the cost for all `trace_pc_guard` calls from the corresponding
+    // CoveredLocation.
     uint64_t Cost = 0;
-    DEBUG(dbgs() << "Check instruction " << *Inst << "\n");
-    if (DebugLoc Loc = Inst->getDebugLoc()) {
-      if (DILocation *DIL = Loc.get()) {
-        DEBUG({
-            dbgs() << "Looking for " << DIL->getFilename() << ":" << DIL->getLine() << ":" << DIL->getColumn() << ":" << DIL->getDiscriminator();
-            for (auto DIP = DIL->getInlinedAt(); DIP; DIP = DIP->getInlinedAt()) {
-              dbgs() << " " << DIP->getFilename() << ":" << DIP->getLine() << ":" << DIP->getColumn() << ":" << DIP->getDiscriminator();
-            }
-            dbgs() << " ...\n";
-        });
-
-        auto CoveredLocation = std::find_if(CoveredLocations.begin(), CoveredLocations.end(), [this, DIL](const std::pair<DIInliningInfo, uint64_t> &CL) {
-              return locationsMatch(*DIL, CL.first);
-              });
-        if (CoveredLocation != CoveredLocations.end()) {
-          Cost = CoveredLocation->second;
-          DEBUG(dbgs() << "found");
-        }
-        DEBUG(dbgs() << "\n");
+    if (isTracePCGuardCall(Inst)) {
+      CallInst *CI = cast<CallInst>(Inst);
+      size_t Index = getTracePCGuardIndex(*CI);
+      auto CoveredLocation = std::find_if(CoveredLocations.begin(), CoveredLocations.end(), [this, Index](decltype(CoveredLocations)::value_type &CL) {
+          return std::get<1>(CL) == Index + TracePCGuardIndexOffset;
+      });
+      if (CoveredLocation != CoveredLocations.end()) {
+        Cost = std::get<2>(*CoveredLocation);
       }
     }
 
@@ -174,55 +171,137 @@ bool SanityCheckCoverageCost::loadCoverage(const Module &M) {
     return false;
   }
 
+  symbolize::LLVMSymbolizer Symbolizer;
   std::unique_ptr<MemoryBuffer> Buffer = std::move(BufOrErr.get());
   line_iterator LineIt(*Buffer, /*SkipBlanks=*/true, '#');
-  std::map<uint64_t, uint64_t> Costs;
   for (; !LineIt.is_at_eof(); ++LineIt) {
-    SmallVector<StringRef, 3> Matches;
+    SmallVector<StringRef, 4> Matches;
     uint64_t Offset = 0;
+    size_t Index = 0;
     uint64_t Cost = 0;
-    if (kPCLineRegex.match(*LineIt, &Matches)) {
-      if (Matches[2].getAsInteger(0, Offset)) {
-        M.getContext().diagnose(DiagnosticInfoSampleProfile(
-            PCFile, LineIt.line_number(), "Could not parse PC: " + *LineIt));
-        return false;
-      }
-      Cost = 1;
-    } else if (kAllTimeCounterRegex.match(*LineIt, &Matches)) {
+    if (kAllTimeCounterRegex.match(*LineIt, &Matches)) {
       if (Matches[1].getAsInteger(0, Offset)) {
         M.getContext().diagnose(DiagnosticInfoSampleProfile(
             PCFile, LineIt.line_number(), "Could not parse PC: " + *LineIt));
         return false;
       }
-      if (Matches[2].getAsInteger(0, Cost)) {
+      if (Matches[2].getAsInteger(0, Index)) {
+        M.getContext().diagnose(DiagnosticInfoSampleProfile(
+            PCFile, LineIt.line_number(), "Could not parse Index: " + *LineIt));
+        return false;
+      }
+      if (Matches[3].getAsInteger(0, Cost)) {
         M.getContext().diagnose(DiagnosticInfoSampleProfile(
             PCFile, LineIt.line_number(), "Could not parse Cost: " + *LineIt));
         return false;
       }
-    }
 
-    if (Offset) {
-      Costs[Offset] += Cost;
-    }
-  }
+      auto ResOrErr = Symbolizer.symbolizeInlinedCode(ModuleName, Offset);
+      if (!ResOrErr) {
+        M.getContext().diagnose(DiagnosticInfoSampleProfile(
+            PCFile, LineIt.line_number(), "Could not symbolize PC: " + *LineIt));
+        return false;
+      }
 
-  symbolize::LLVMSymbolizer Symbolizer;
-  for (auto OffsetAndCost: Costs) {
-    auto ResOrErr = Symbolizer.symbolizeInlinedCode(ModuleName, OffsetAndCost.first);
-    if (!ResOrErr) {
-      M.getContext().diagnose(DiagnosticInfoSampleProfile(
-          PCFile, LineIt.line_number(), "Could not symbolize PC: " + *LineIt));
-      return false;
-    }
-
-    auto Res = ResOrErr.get();
-    if (Res.getNumberOfFrames() && Res.getFrame(0).FileName != kInvalidFileName) {
-      DEBUG(dbgs() << "Covered! " << Res.getFrame(0).FileName << ":" << Res.getFrame(0).Line << "\n");
-      CoveredLocations.push_back(std::make_pair(Res, OffsetAndCost.second));
+      auto Res = ResOrErr.get();
+      if (Res.getNumberOfFrames() && Res.getFrame(0).FileName != kInvalidFileName) {
+        CoveredLocations.push_back(std::make_tuple(Res, Index, Cost));
+      }
     }
   }
 
   return true;
+}
+
+bool SanityCheckCoverageCost::computeTracePCGuardIndexOffset(Function &F) {
+  // computeTracePCGuardIndexOffset tries to compute the range of
+  // CoveredLocations that corresponds to `trace_pc_guard` calls in F. This is
+  // tricky, because we can often not uniquely identify which call corresponds
+  // to which CoveredLocation.
+  //
+  // Our plan is to loop through all pairs of `trace_pc_guard` calls and
+  // CoveredLocations, and record matching offsets. Then, we return the offset
+  // value that was found most often.
+  //
+  // Note that all of this is rather brittle. In particular, it also expects
+  // the set of `trace_pc_guard` calls to be identical to the set that was used
+  // to measure coverage. This makes it impossible to do things like
+  // profile-guided optimization, because PGO affects inlining.
+  //
+  // We try to safeguard against mismatches a little bit, by requiring that the
+  // best offset matches at least one third of the `trace_pc_guard` calls.
+
+  std::map<size_t, size_t> Offsets;
+  size_t NumTracePCGuardCalls = 0;
+  for (Instruction &I : instructions(&F)) {
+    if (!isTracePCGuardCall(&I)) continue;
+    CallInst *CI = cast<CallInst>(&I);
+    DebugLoc Loc = CI->getDebugLoc();
+    if (!Loc) continue;
+    DILocation *DIL = Loc.get();
+    if (!DIL) continue;
+    size_t Index = getTracePCGuardIndex(*CI);
+    NumTracePCGuardCalls += 1;
+
+    for (auto CL: CoveredLocations) {
+      DIInliningInfo &DIII = std::get<0>(CL);
+      if (locationsMatch(*DIL, DIII)) {
+        size_t CLIndex = std::get<1>(CL);
+        dbgs() << "  match: " << F.getName() << " " << Index << " " << CLIndex << "\n";
+        if (CLIndex >= Index) {
+          Offsets[CLIndex - Index] += 1;
+        }
+      }
+    }
+  }
+
+  size_t MostFrequentOffset = 0;
+  size_t MaxOffsetCount = 0;
+  for (auto O: Offsets) {
+    if (O.second > MaxOffsetCount) {
+      MaxOffsetCount = O.second;
+      MostFrequentOffset = O.first;
+    }
+  }
+  if (MaxOffsetCount > NumTracePCGuardCalls / 3) {
+    TracePCGuardIndexOffset = MostFrequentOffset;
+    dbgs() << "computeTracePCGuardIndexOffset: F:" << F.getName() << " Offset:" << MostFrequentOffset << " (based on " << MaxOffsetCount << " / " << NumTracePCGuardCalls << " matches)\n";
+    return true;
+  } else if (MaxOffsetCount) {
+    dbgs() << "computeTracePCGuardIndexOffset: F:" << F.getName() << " Offset:" << MostFrequentOffset << " (ignored, only based on " << MaxOffsetCount << " / " << NumTracePCGuardCalls << " matches)\n";
+    return false;
+  } else {
+    dbgs() << "computeTracePCGuardIndexOffset: F:" << F.getName() << " Offset: none (no match)\n";
+    return false;
+  }
+}
+
+bool SanityCheckCoverageCost::isTracePCGuardCall(Instruction *I) {
+  if (!I) return false;
+  if (CallInst *CI = dyn_cast<CallInst>(I)) {
+    if (CI->getCalledFunction() && CI->getCalledFunction()->getName() == kTracePcGuardName) {
+      return true;
+    }
+  }
+  return false;
+}
+
+size_t SanityCheckCoverageCost::getTracePCGuardIndex(CallInst &I) {
+  assert(isTracePCGuardCall(&I));
+
+  ConstantExpr *GuardPtr = cast<ConstantExpr>(I.getArgOperand(0));
+  if (GuardPtr->getOpcode() == Instruction::IntToPtr) {
+    ConstantExpr *GuardAddress = cast<ConstantExpr>(GuardPtr->getOperand(0));
+    assert(GuardAddress->getOpcode() == Instruction::Add);
+    ConstantInt *Index = cast<ConstantInt>(GuardAddress->getOperand(1));
+    // Divide Index by sizeof(int32_t)
+    return (size_t)Index->getZExtValue() / 4;
+  } else if (GuardPtr->getOpcode() == Instruction::GetElementPtr) {
+    return 0;
+  } else {
+    assert(false && "Can't make sense of trace_pc_guard argument.");
+    return 0;
+  }
 }
 
 bool SanityCheckCoverageCost::locationsMatch(const DILocation &DIL, const DIInliningInfo &DIII) {
