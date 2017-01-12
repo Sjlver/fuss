@@ -177,7 +177,7 @@ compute_coverage() {
 # Generate initial, pgo, and thresholded versions
 build_all() {
   # Initial build; simply AddressSanitizer, no PGO, no ASAP.
-  build_target_and_fuzzer "asan" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
+  build_target_and_fuzzer "asan" "$COVERAGE_ONLY_CFLAGS" "$COVERAGE_ONLY_LDFLAGS"
 
   # Run the fuzzer under perf. Use branch tracing because that's what
   # create_llvm_prof wants.
@@ -188,14 +188,14 @@ build_all() {
 
   # Re-build using profiling data.
   build_target_and_fuzzer "asan-pgo" \
-    "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" \
-    "$COVERAGE_COUNTERS_LDFLAGS"
+    "$COVERAGE_ONLY_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof" \
+    "$COVERAGE_ONLY_LDFLAGS"
 
   # Build and test various cost thresholds
   for threshold in $THRESHOLDS; do
     build_target_and_fuzzer "asap-$threshold" \
-      "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose" \
-      "$COVERAGE_COUNTERS_LDFLAGS"
+      "$COVERAGE_ONLY_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose" \
+      "$COVERAGE_ONLY_LDFLAGS"
   done
 
   # Create extra variants to measure how much each feature contributes to
@@ -239,8 +239,8 @@ build_all() {
 
   if echo "$VARIANTS" | grep -q asapcoverage; then
     build_target_and_fuzzer "asan-asapcoverage" \
-      "$COVERAGE_COUNTERS_CFLAGS -fsanitize=asapcoverage -mllvm -asap-cost-threshold=100000 -mllvm -asap-verbose -mllvm -asap-module-name=$WORK_DIR/target-asan-build/fuzzer -mllvm -asap-coverage-file=$WORK_DIR/logs/perf-asan.log " \
-      "$COVERAGE_COUNTERS_LDFLAGS"
+      "$COVERAGE_ONLY_CFLAGS -fsanitize=asapcoverage -mllvm -asap-cost-threshold=100000 -mllvm -asap-verbose -mllvm -asap-module-name=$WORK_DIR/target-asan-build/fuzzer -mllvm -asap-coverage-file=$WORK_DIR/logs/perf-asan.log " \
+      "$COVERAGE_ONLY_LDFLAGS"
   fi
 }
 

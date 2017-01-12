@@ -36,7 +36,7 @@ namespace {
 const std::string kTracePcGuardName =
     "__sanitizer_cov_trace_pc_guard";
 const std::string kInvalidFileName("<invalid>");
-Regex kAllTimeCounterRegex("^AllTimeCounter: (0x[0-9a-f]+) .* ([0-9]+) ([0-9]+)$");
+Regex kAllTimeCounterRegex("^AllTimeCounter: (0x[0-9a-f]+) ([0-9]+) ([0-9]+)$");
 
 // FIXME: This class is only here to support the transition to llvm::Error. It
 // will be removed once this transition is complete. Clients should prefer to
@@ -96,7 +96,7 @@ bool SanityCheckCoverageCost::runOnFunction(Function &F) {
 
   SanityCheckInstructions &SCI = getAnalysis<SanityCheckInstructions>();
 
-  //DEBUG({
+  DEBUG({
       for (auto &CoveredLocation: CoveredLocations) {
         auto &DIII = std::get<0>(CoveredLocation);
         dbgs() << "Covered: ";
@@ -107,7 +107,7 @@ bool SanityCheckCoverageCost::runOnFunction(Function &F) {
         dbgs() << "index: " << std::get<1>(CoveredLocation) << " ";
         dbgs() << "cost: " << std::get<2>(CoveredLocation) << "\n";
       }
-  //});
+  });
 
   if (!computeTracePCGuardIndexOffset(F)) {
     dbgs() << "Warning: Could not compute trace_pc_guard index offset for function: " << F.getName() << "\n";
@@ -225,11 +225,13 @@ bool SanityCheckCoverageCost::computeTracePCGuardIndexOffset(Function &F) {
   //
   // Note that all of this is rather brittle. In particular, it also expects
   // the set of `trace_pc_guard` calls to be identical to the set that was used
-  // to measure coverage. This makes it impossible to do things like
-  // profile-guided optimization, because PGO affects inlining.
+  // to measure coverage. This requires exactly the same compilation steps, and
+  // makes it impossible to do things like profile-guided optimization, because
+  // PGO affects inlining.
   //
-  // We try to safeguard against mismatches a little bit, by requiring that the
-  // best offset matches at least one third of the `trace_pc_guard` calls.
+  // There is no real safeguard against mismatches :( Coverage can in principle
+  // be arbitrarily low, and so it's hard to define when a match is of
+  // sufficient quality.
 
   std::map<size_t, size_t> Offsets;
   size_t NumTracePCGuardCalls = 0;
@@ -247,7 +249,7 @@ bool SanityCheckCoverageCost::computeTracePCGuardIndexOffset(Function &F) {
       DIInliningInfo &DIII = std::get<0>(CL);
       if (locationsMatch(*DIL, DIII)) {
         size_t CLIndex = std::get<1>(CL);
-        dbgs() << "  match: " << F.getName() << " " << Index << " " << CLIndex << "\n";
+        DEBUG(dbgs() << "  match: " << F.getName() << " " << Index << " " << CLIndex << "\n");
         if (CLIndex >= Index) {
           Offsets[CLIndex - Index] += 1;
         }
@@ -263,13 +265,10 @@ bool SanityCheckCoverageCost::computeTracePCGuardIndexOffset(Function &F) {
       MostFrequentOffset = O.first;
     }
   }
-  if (MaxOffsetCount > NumTracePCGuardCalls / 3) {
+  if (MaxOffsetCount) {
     TracePCGuardIndexOffset = MostFrequentOffset;
     dbgs() << "computeTracePCGuardIndexOffset: F:" << F.getName() << " Offset:" << MostFrequentOffset << " (based on " << MaxOffsetCount << " / " << NumTracePCGuardCalls << " matches)\n";
     return true;
-  } else if (MaxOffsetCount) {
-    dbgs() << "computeTracePCGuardIndexOffset: F:" << F.getName() << " Offset:" << MostFrequentOffset << " (ignored, only based on " << MaxOffsetCount << " / " << NumTracePCGuardCalls << " matches)\n";
-    return false;
   } else {
     dbgs() << "computeTracePCGuardIndexOffset: F:" << F.getName() << " Offset: none (no match)\n";
     return false;

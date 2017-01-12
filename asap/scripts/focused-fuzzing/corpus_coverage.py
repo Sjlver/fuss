@@ -13,7 +13,7 @@ import re
 import subprocess
 import sys
 
-# AllTimeCounter: 0x51dcbe in function /path/file.c:638 2
+# AllTimeCounter: 0x51dcbe 123 2
 ALLTIMECOUNTER_RE = re.compile(r'^AllTimeCounter: (0x[0-9a-f]+) .* (\d+)$')
 
 def covered_pcs(fuzzer, testcase):
