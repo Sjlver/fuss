@@ -27,7 +27,7 @@ build_target_and_fuzzer() {
       -DCMAKE_EXE_LINKER_FLAGS="$DEFAULT_LDFLAGS $extra_ldflags" \
       -DCMAKE_C_LINK_EXECUTABLE="<CMAKE_C_COMPILER> <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> <LINK_LIBRARIES>" \
       ../boringssl-src
-    cmake --build . -- -j $N_CORES -v 2>&1 | tee "../logs/build-${name}.log"
+    ninja -j $N_CORES -v ssl/libssl.a crypto/libcrypto.a 2>&1 | tee "../logs/build-${name}.log"
     "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 -I include -c ../boringssl-src/fuzz/privkey.cc \
       2>&1 | tee -a "../logs/build-${name}.log"
     "$CXX" $DEFAULT_LDFLAGS $extra_ldflags privkey.o ssl/libssl.a crypto/libcrypto.a \
