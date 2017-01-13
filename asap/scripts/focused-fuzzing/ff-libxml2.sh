@@ -35,7 +35,7 @@ build_target_and_fuzzer() {
       -I "$WORK_DIR/target-${name}-build/include" -I "$WORK_DIR/libxml2-src/include" \
       -c "$SCRIPT_DIR/ff-libxml2.cc"
     "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-libxml2.o "$WORK_DIR/target-${name}-build/.libs/libxml2.a" \
-      "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer
+      "$LIBFUZZER_A" -o fuzzer
     cd ..
   fi
 }

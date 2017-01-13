@@ -48,7 +48,7 @@ build_target_and_fuzzer() {
       -c "$SCRIPT_DIR/ff-woff2-2016-05-06.cc" \
       2>&1 | tee -a "../logs/build-${name}.log"
     "$CXX" $DEFAULT_LDFLAGS $extra_ldflags *.o \
-      "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer \
+      "$LIBFUZZER_A" -o fuzzer \
       2>&1 | tee -a "../logs/build-${name}.log"
     cd ..
   fi

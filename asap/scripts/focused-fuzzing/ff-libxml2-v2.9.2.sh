@@ -46,7 +46,7 @@ build_target_and_fuzzer() {
       -c "$SCRIPT_DIR/ff-libxml2.cc" \
       2>&1 | tee -a "../logs/build-${name}.log"
     "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-libxml2.o "$WORK_DIR/target-${name}-build/.libs/libxml2.a" \
-      "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer \
+      "$LIBFUZZER_A" -o fuzzer \
       2>&1 | tee -a "../logs/build-${name}.log"
     cd ..
   fi

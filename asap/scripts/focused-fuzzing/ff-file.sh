@@ -25,7 +25,7 @@ build_target_and_fuzzer() {
       -c "$SCRIPT_DIR/ff-file.cc"
     "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-file.o \
       "$WORK_DIR/target-${name}-build/src/.libs/libmagic.a" \
-      "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer
+      "$LIBFUZZER_A" -o fuzzer
     cd ..
   fi
 }

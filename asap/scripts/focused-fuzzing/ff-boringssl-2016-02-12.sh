@@ -31,7 +31,7 @@ build_target_and_fuzzer() {
     "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 -I include -c ../boringssl-src/fuzz/privkey.cc \
       2>&1 | tee -a "../logs/build-${name}.log"
     "$CXX" $DEFAULT_LDFLAGS $extra_ldflags privkey.o ssl/libssl.a crypto/libcrypto.a \
-      "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer \
+      "$LIBFUZZER_A" -o fuzzer \
       2>&1 | tee -a "../logs/build-${name}.log"
     cd ..
   fi

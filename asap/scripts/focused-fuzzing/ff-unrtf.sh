@@ -31,7 +31,7 @@ build_target_and_fuzzer() {
       -DHAVE_CONFIG_H -I src -I"$WORK_DIR/unrtf-0.21.9/src" \
       -c "$SCRIPT_DIR/ff-unrtf.cc"
     "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-unrtf.o $(ls -1 src/*.o | grep -v main.o) \
-      "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer
+      "$LIBFUZZER_A" -o fuzzer
     cd ..
   fi
 }

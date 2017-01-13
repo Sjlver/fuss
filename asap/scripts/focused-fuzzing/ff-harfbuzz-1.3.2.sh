@@ -30,7 +30,7 @@ build_target_and_fuzzer() {
       -c ../harfbuzz-src/test/fuzzing/hb-fuzzer.cc \
       2>&1 | tee -a "../logs/build-${name}.log"
     "$CXX" $DEFAULT_LDFLAGS $extra_ldflags hb-fuzzer.o src/.libs/libharfbuzz-fuzzing.a -lglib-2.0 \
-      "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer \
+      "$LIBFUZZER_A" -o fuzzer \
       2>&1 | tee -a "../logs/build-${name}.log"
     cd ..
   fi

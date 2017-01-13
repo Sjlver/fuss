@@ -32,7 +32,9 @@ void TracePC::HandleTrace(uint32_t *Guard, uintptr_t PC) {
   if (!Idx) return;
   PCs[Idx % kNumPCs] = PC;
   Counters[Idx % kNumCounters]++;
+#ifdef FUSS
   AllTimeCounters[Idx % kNumAllTimeCounters]++;
+#endif
 }
 
 size_t TracePC::GetTotalPCCoverage() {
@@ -190,13 +192,19 @@ void TracePC::PrintCoverage() {
 }
 
 void TracePC::PrintAllTimeCounters() {
-  if (!UsingTracePcGuard()) return;
+  uint64_t TotalTPCGCount = 0;
 
-  for (size_t i = 1; i < GetNumPCs(); i++) {
-    if (!PCs[i]) continue;
+#ifdef FUSS
+  if (UsingTracePcGuard()) {
+    for (size_t i = 1; i < GetNumPCs(); i++) {
+      if (!PCs[i]) continue;
 
-    Printf("AllTimeCounter: %p %zd %lld\n", PCs[i], i, AllTimeCounters[i]);
+      Printf("AllTimeCounter: %p %zd %lld\n", PCs[i], i, AllTimeCounters[i]);
+      TotalTPCGCount += AllTimeCounters[i];
+    }
   }
+#endif
+  Printf("stat::total_tpcg_count:         %lld\n", TotalTPCGCount);
 }
 
 // Value profile.

@@ -29,7 +29,7 @@ build_target_and_fuzzer() {
     "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-pcre.o \
       "$WORK_DIR/target-${name}-build/.libs/libpcre2-posix.a" \
       "$WORK_DIR/target-${name}-build/.libs/libpcre2-8.a" \
-      "$WORK_DIR/Fuzzer-build/libFuzzer.a" -o fuzzer
+      "$LIBFUZZER_A" -o fuzzer
     cd ..
   fi
 }

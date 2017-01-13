@@ -20,7 +20,7 @@ build_target_and_fuzzer() {
       -o http_parser.o 2>&1 | tee "../logs/build-${name}.log"
     "$CC" $DEFAULT_CFLAGS $extra_cflags -I ../http-parser-src -c "$SCRIPT_DIR/ff-http-parser.c" \
       -o ff-http-parser.o 2>&1 | tee -a "../logs/build-${name}.log"
-    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-http-parser.o http_parser.o "$WORK_DIR/Fuzzer-build/libFuzzer.a" \
+    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-http-parser.o http_parser.o "$LIBFUZZER_A" \
       -o fuzzer 2>&1 | tee -a "../logs/build-${name}.log"
     cd ..
   fi
