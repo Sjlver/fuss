@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 def main():
     parser = argparse.ArgumentParser(description="Plots graphs for speed and coverage.")
     parser.add_argument("--output", help="Output file to save plot to")
+    parser.add_argument("--benchmark", help="Name of the benchmark", required=True)
     parser.add_argument("data", nargs="+")
     args = parser.parse_args()
 
@@ -24,11 +25,13 @@ def main():
     names = [ re.sub(r'-\d\d$', '', n.decode()) for n in names ]
     names = [ n.replace('asan-', '') for n in names ]
     names = [ n.replace('noinstrumentation', 'noinstr') for n in names ]
+    names = [ re.sub(r'asap-\d\d$', 'asap-profile', n) for n in names ]
+    names = [ n.replace('asapcoverage', 'asap-precise') for n in names ]
     execs_per_sec = data['execs_per_sec'].astype(float)
-    cov = data['cov']
+    cov = data['actual_cov']
 
     fig, axes = plt.subplots(nrows=2, ncols=1)
-    fig.suptitle('Execution speed and coverage by version')
+    fig.suptitle('Execution speed and coverage: {}'.format(args.benchmark))
     axes[0].boxplot(execs_per_sec, labels=names, showmeans=True)
     axes[0].set_ylabel('Execution speed [execs/sec]')
 

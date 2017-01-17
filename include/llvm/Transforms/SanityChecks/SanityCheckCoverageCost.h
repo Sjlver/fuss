@@ -9,6 +9,7 @@
 
 #include "llvm/DebugInfo/DIContext.h"
 
+#include <map>
 #include <tuple>
 #include <vector>
 
@@ -58,14 +59,17 @@ struct SanityCheckCoverageCost : public llvm::FunctionPass, public SanityCheckCo
   virtual void print(llvm::raw_ostream &O, const llvm::Module *M) const override;
 
 private:
-  // The set of locations that have been covered, as a vector of tuples
-  // containing the location's DIInliningInfo, index in the `trace_pc_guard`
-  // array, and cost.
-  std::vector<std::tuple<llvm::DIInliningInfo, size_t, uint64_t>> CoveredLocations;
+  // The set of locations that have been covered, by function, as a vector of
+  // tuples containing the location's DIInliningInfo, index in the
+  // `trace_pc_guard` array, and cost.
+  std::map<llvm::Function *, std::vector<std::tuple<llvm::DIInliningInfo, size_t, uint64_t>>> CoveredLocations;
 
   // The offset of the `trace_pc_guard` indices in the current function
   // relative to the indices in CoveredLocations.
   size_t TracePCGuardIndexOffset;
+
+  // The minimum and maximum `trace_pc_guard` offset for each function.
+  std::map<llvm::Function *, std::pair<size_t, size_t>> OffsetRanges;
 
   // Loads coverage info from a file containing program counters, and builds a
   // list of symbolized debug locations. Returns true on success.

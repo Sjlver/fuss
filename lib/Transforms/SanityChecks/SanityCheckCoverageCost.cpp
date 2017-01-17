@@ -97,7 +97,7 @@ bool SanityCheckCoverageCost::runOnFunction(Function &F) {
   SanityCheckInstructions &SCI = getAnalysis<SanityCheckInstructions>();
 
   DEBUG({
-      for (auto &CoveredLocation: CoveredLocations) {
+      for (auto &CoveredLocation: CoveredLocations[&F]) {
         auto &DIII = std::get<0>(CoveredLocation);
         dbgs() << "Covered: ";
         for (uint32_t i = 0, e = DIII.getNumberOfFrames(); i < e; ++i) {
@@ -124,10 +124,10 @@ bool SanityCheckCoverageCost::runOnFunction(Function &F) {
     if (isTracePCGuardCall(Inst)) {
       CallInst *CI = cast<CallInst>(Inst);
       size_t Index = getTracePCGuardIndex(*CI);
-      auto CoveredLocation = std::find_if(CoveredLocations.begin(), CoveredLocations.end(), [this, Index](decltype(CoveredLocations)::value_type &CL) {
+      auto CoveredLocation = std::find_if(CoveredLocations[&F].begin(), CoveredLocations[&F].end(), [this, Index](std::tuple<llvm::DIInliningInfo, size_t, uint64_t> &CL) {
           return std::get<1>(CL) == Index + TracePCGuardIndexOffset;
       });
-      if (CoveredLocation != CoveredLocations.end()) {
+      if (CoveredLocation != CoveredLocations[&F].end()) {
         Cost = std::get<2>(*CoveredLocation);
       }
     }
@@ -171,7 +171,13 @@ bool SanityCheckCoverageCost::loadCoverage(const Module &M) {
     return false;
   }
 
-  symbolize::LLVMSymbolizer Symbolizer;
+  symbolize::LLVMSymbolizer::Options SymbolizerOptions(
+      symbolize::FunctionNameKind::LinkageName,
+      /* UseSymbolTable */ true,
+      /* Demangle */ false,
+      /* RelativeAddresses */ false,
+      /* DefaultArch */ "");
+  symbolize::LLVMSymbolizer Symbolizer(SymbolizerOptions);
   std::unique_ptr<MemoryBuffer> Buffer = std::move(BufOrErr.get());
   line_iterator LineIt(*Buffer, /*SkipBlanks=*/true, '#');
   for (; !LineIt.is_at_eof(); ++LineIt) {
@@ -205,9 +211,38 @@ bool SanityCheckCoverageCost::loadCoverage(const Module &M) {
 
       auto Res = ResOrErr.get();
       if (Res.getNumberOfFrames() && Res.getFrame(0).FileName != kInvalidFileName) {
-        CoveredLocations.push_back(std::make_tuple(Res, Index, Cost));
+        Function *F = M.getFunction(Res.getFrame(Res.getNumberOfFrames() - 1).FunctionName);
+        if (F) {
+          CoveredLocations[F].push_back(std::make_tuple(Res, Index, Cost));
+        }
       }
     }
+  }
+
+  // Compute the minimum and maximum offset for each function.
+  // We go through indices in order. Whenever the function changes, we adjust
+  // the bounds of the last and current function.
+  std::map<size_t, Function *> FunctionsByOffset;
+  for (auto FCL: CoveredLocations) {
+    for (auto &CL: FCL.second) {
+      FunctionsByOffset[std::get<1>(CL)] = FCL.first;
+    }
+  }
+  Function *LastFunction = nullptr;
+  size_t LastOffset = (size_t)(-1);
+  for (auto FO: FunctionsByOffset) {
+    if (LastFunction != FO.second) {
+      assert(OffsetRanges.count(FO.second) == 0 && "non-contiguous functions?");
+      OffsetRanges[FO.second].first = LastOffset + 1;
+      if (LastFunction) {
+        OffsetRanges[LastFunction].second = FO.first;
+      }
+      LastFunction = FO.second;
+    }
+    LastOffset = FO.first;
+  }
+  if (LastFunction) {
+    OffsetRanges[LastFunction].second = (size_t)(-1);
   }
 
   return true;
@@ -233,6 +268,13 @@ bool SanityCheckCoverageCost::computeTracePCGuardIndexOffset(Function &F) {
   // be arbitrarily low, and so it's hard to define when a match is of
   // sufficient quality.
 
+  TracePCGuardIndexOffset = (size_t)(-1);
+  if (!CoveredLocations.count(&F)) {
+    dbgs() << "computeTracePCGuardIndexOffset: F:" << F.getName()
+           << " Offset: none (no covered locations)\n";
+    return false;
+  }
+
   std::map<size_t, size_t> Offsets;
   size_t NumTracePCGuardCalls = 0;
   for (Instruction &I : instructions(&F)) {
@@ -245,12 +287,14 @@ bool SanityCheckCoverageCost::computeTracePCGuardIndexOffset(Function &F) {
     size_t Index = getTracePCGuardIndex(*CI);
     NumTracePCGuardCalls += 1;
 
-    for (auto CL: CoveredLocations) {
+    for (auto CL: CoveredLocations[&F]) {
       DIInliningInfo &DIII = std::get<0>(CL);
-      if (locationsMatch(*DIL, DIII)) {
-        size_t CLIndex = std::get<1>(CL);
-        DEBUG(dbgs() << "  match: " << F.getName() << " " << Index << " " << CLIndex << "\n");
-        if (CLIndex >= Index) {
+      size_t CLIndex = std::get<1>(CL);
+      if (/**/ CLIndex > Index
+            && CLIndex - Index >= OffsetRanges[&F].first
+            && CLIndex - Index < OffsetRanges[&F].second) {
+        if (locationsMatch(*DIL, DIII)) {
+          DEBUG(dbgs() << "  match: " << F.getName() << " " << Index << " " << CLIndex << "\n");
           Offsets[CLIndex - Index] += 1;
         }
       }
@@ -267,10 +311,22 @@ bool SanityCheckCoverageCost::computeTracePCGuardIndexOffset(Function &F) {
   }
   if (MaxOffsetCount) {
     TracePCGuardIndexOffset = MostFrequentOffset;
-    dbgs() << "computeTracePCGuardIndexOffset: F:" << F.getName() << " Offset:" << MostFrequentOffset << " (based on " << MaxOffsetCount << " / " << NumTracePCGuardCalls << " matches)\n";
+    dbgs() << "computeTracePCGuardIndexOffset: F:" << F.getName()
+           << " Offset:" << MostFrequentOffset
+           << " Matches: " << MaxOffsetCount
+           << " TPCG calls: " << NumTracePCGuardCalls
+           << " Covered locations: " << CoveredLocations[&F].size()
+           << " Range: " << OffsetRanges[&F].first << " - " << OffsetRanges[&F].second
+           << "\n";
     return true;
   } else {
-    dbgs() << "computeTracePCGuardIndexOffset: F:" << F.getName() << " Offset: none (no match)\n";
+    dbgs() << "computeTracePCGuardIndexOffset: F:" << F.getName()
+           << " Offset: none"
+           << " Matches: " << MaxOffsetCount
+           << " TPCG calls: " << NumTracePCGuardCalls
+           << " Covered locations: " << CoveredLocations[&F].size()
+           << " Range: " << OffsetRanges[&F].first << " - " << OffsetRanges[&F].second
+           << "\n";
     return false;
   }
 }
@@ -312,11 +368,15 @@ bool SanityCheckCoverageCost::locationsMatch(const DILocation &DIL, const DIInli
     }
     const DILineInfo &IIFrame = DIII.getFrame(i);
 
-    // Compare the DILocation frame to the DIInliningInfo frame. Note that the
-    // debug info in the binary does not preserve column numbers and
-    // discriminators for inlined instructions. Thus we only take these values
-    // into account if they are non-zero.
-    if (/**/!sys::fs::equivalent(IIFrame.FileName, LocFrame->getFilename())
+    // Compare the DILocation frame to the DIInliningInfo frame.
+    // - We do not compare filenames; some build systems move source files
+    //   around, and we'd like to support that.
+    // - Instead, function names have to match. We check both LinkageName and
+    //   Name and hope that they aren't demangled and that we are lucky :-/
+    // - We only take column numbers and discriminators into account if they
+    //   are non-zero.
+    if (/**/(IIFrame.FunctionName != LocFrame->getScope()->getSubprogram()->getLinkageName()
+           && IIFrame.FunctionName != LocFrame->getScope()->getSubprogram()->getName())
          || IIFrame.Line != LocFrame->getLine()
          || (IIFrame.Column != 0 && LocFrame->getColumn() != 0
            && IIFrame.Column != LocFrame->getColumn())
