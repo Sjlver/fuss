@@ -14,7 +14,7 @@ import numpy as np
 TIMESTAMP_RE = re.compile(r' timestamp: (\d+)$')
 SECONDS_RE = re.compile(r'^#(\d+)\s.* secs: (\d+)(:? |$)')
 ANCESTRY_RE = re.compile(r'^ANCESTRY: ([0-9a-f]+) -> ([0-9a-f]+)$')
-COVERAGE_BITS_RE = re.compile(br'^#\d+.*\sDONE\s.* cov: (\d+) bits: (\d+)(:? |$)', re.MULTILINE)
+COVERAGE_BITS_RE = re.compile(br'^#\d+.*\sDONE\s.* cov: (\d+) ft: (\d+)(:? |$)', re.MULTILINE)
 JOB_EXITED_RE = re.compile(r'===+ Job (\d+) exited with exit code \d+ ===+')
 
 def parse_logs(f):
@@ -94,10 +94,10 @@ def main():
     else:
         time_ticks = np.linspace(0, end_time, num=args.num_ticks)
 
-    last_coverage = last_bits = 0
+    last_coverage = last_ft = 0
     last_num_units = 0
 
-    print("{:8s}\t{:8s}\t{:8s}\t{:8s}\t{:12s}".format("time", "coverage", "bits", "units", "execs"))
+    print("{:8s}\t{:8s}\t{:8s}\t{:8s}\t{:12s}".format("time", "coverage", "ft", "units", "execs"))
     for current_time in time_ticks:
         events_up_to_now = [(t, u, e, j) for t, u, e, j in events if t <= current_time]
         if not events_up_to_now:
@@ -107,7 +107,7 @@ def main():
         # Compute coverage
         units_up_to_now = set(u for t, u, e, j in events_up_to_now if u is not None)
         if len(units_up_to_now) > last_num_units:
-            last_coverage, last_bits = coverage_for_units(units_up_to_now, args.fuzzer)
+            last_coverage, last_ft = coverage_for_units(units_up_to_now, args.fuzzer)
             last_num_units = len(units_up_to_now)
 
         # Compute execs (interpolate between last and next event)
@@ -127,7 +127,7 @@ def main():
             else:
                 execs = next_event[1]
             total_execs += execs
-        print("{:8.0f}\t{:8d}\t{:8d}\t{:8d}\t{:12d}".format(current_time, last_coverage, last_bits, last_num_units, round(total_execs)))
+        print("{:8.0f}\t{:8d}\t{:8d}\t{:8d}\t{:12d}".format(current_time, last_coverage, last_ft, last_num_units, round(total_execs)))
         sys.stdout.flush()
 
 if __name__ == '__main__':
