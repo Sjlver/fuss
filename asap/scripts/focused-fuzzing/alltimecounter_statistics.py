@@ -44,15 +44,14 @@ def get_threshold_for_costlevel(vs, c):
 def main():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("--log", required=True)
+    arg_parser.add_argument("--costlevel", type=float, required=True)
     args = arg_parser.parse_args(sys.argv[1:])
 
     with open(args.log) as log_file:
         log = log_file.read()
     all_pcs = extract_pcs_and_costs(log)
 
-    print("number of atoms:", len(all_pcs))
-    print("total count:", sum(all_pcs.values()))
-    print("threshold at c=0.01:", get_threshold_for_costlevel(all_pcs.values(), 0.01))
+    print(get_threshold_for_costlevel(all_pcs.values(), args.costlevel))
 
 
 if __name__ == '__main__':

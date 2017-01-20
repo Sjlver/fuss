@@ -22,30 +22,29 @@ LIBFUZZER_CFLAGS="-O3 -g -Wall -std=c++11"
 DEFAULT_CFLAGS="-O3 -g -Wall -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
 DEFAULT_LDFLAGS=""
 
-COVERAGE_COUNTERS_CFLAGS="-fsanitize=address -fsanitize-coverage=trace-pc-guard,indirect-calls"
-COVERAGE_COUNTERS_LDFLAGS="-fsanitize=address -fsanitize-coverage=trace-pc-guard,indirect-calls"
+# We will use the following naming scheme for versions:
+# name = base-modifier, where
+#
+# base: determines type of instrumentation that is being used
+#       - asan: with AddressSanitizer + trace_pc_guard
+#       - tpcg: with trace_pc_guard only
+#       - noinstr: without instrumentation at all
+# modifier: determines whether we use FUSS or otherwise change the base.
+#       - nofuss: linked against an unmodified libFuzzer.a
+#       - prof:   a copy for profiling
+#       - fperf:  with fuss, and costs from perf
+#       - fprec:  with fuss, and costs from tpcg counters
 
-COVERAGE_ICALLS_CFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls"
-COVERAGE_ICALLS_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge,indirect-calls"
+TPCG_CFLAGS="-fsanitize-coverage=trace-pc-guard"
+TPCG_LDFLAGS="-fsanitize-coverage=trace-pc-guard"
 
-COVERAGE_EDGE_CFLAGS="-fsanitize=address -fsanitize-coverage=edge"
-COVERAGE_EDGE_LDFLAGS="-fsanitize=address -fsanitize-coverage=edge"
-
-COVERAGE_NONE_CFLAGS="-fsanitize=address"
-COVERAGE_NONE_LDFLAGS="-fsanitize=address"
-
-COVERAGE_ONLY_CFLAGS="-fsanitize-coverage=trace-pc-guard,indirect-calls"
-COVERAGE_ONLY_LDFLAGS="-fsanitize-coverage=trace-pc-guard,indirect-calls"
-
-SANITIZE_NOCHECKS_CFLAGS="-mllvm -asan-instrument-reads=0 -mllvm -asan-instrument-writes=0 -mllvm -asan-globals=0 -mllvm -asan-stack=0"
-SANITIZE_NOPOISON_OPTIONS="poison_heap=0"
-SANITIZE_NOQUARANTINE_OPTIONS="quarantine_size=0"
+ASAN_CFLAGS="-fsanitize=address $TPCG_CFLAGS"
+ASAN_LDFLAGS="-fsanitize=address $TPCG_LDFLAGS"
 
 # Parameters for the fuzzers and the build
 
 WORK_DIR="$(pwd)"
 N_CORES=${N_CORES:-$(getconf _NPROCESSORS_ONLN)}
-MAX_LEN=${MAX_LEN:-128}
 
 if [ "$N_CORES" -ge 3 ]; then
   N_FUZZER_JOBS="$((N_CORES - 2))"
@@ -57,19 +56,18 @@ fi
 export ASAN_OPTIONS="malloc_context_size=0"
 
 # The number of seconds for which we run fuzzers during testing and profiling
-FUZZER_TESTING_SECONDS=${FUZZER_TESTING_SECONDS:-20}
-FUZZER_PROFILING_SECONDS=${FUZZER_PROFILING_SECONDS:-20}
-FUZZER_BENCHMARKING_SECONDS=${FUZZER_BENCHMARKING_SECONDS:-5}
+FUZZER_WARMUP_SECONDS=${FUZZER_WARMUP_SECONDS:-60}
+FUZZER_TESTING_SECONDS=${FUZZER_TESTING_SECONDS:-60}
+FUZZER_PROFILING_SECONDS=${FUZZER_PROFILING_SECONDS:-60}
 
 # Parameters for FUSS mode
-FUSS_TESTING_SECONDS=${FUSS_TESTING_SECONDS:-60}
-FUSS_PROFILING_SECONDS=${FUSS_PROFILING_SECONDS:-60}
-FUSS_THRESHOLD=${FUSS_THRESHOLD:-500}
 FUSS_TOTAL_SECONDS=${FUSS_TOTAL_SECONDS:-3600}
 
-# Which thresholds and variants should we test?
-THRESHOLDS="${THRESHOLDS:-5000 2000 1000 750 500 333 200 100 80 50 20 10 5 2 1}"
-VARIANTS="${VARIANTS:-icalls edge nocoverage noasan nochecks nopoison noquarantine noelastic noinstrumentation asapcoverage}"
+# The cost level used by FUSS in precise mode
+FPREC_COSTLEVEL=0.005
+
+# Which variants should we build and test?
+VARIANTS="${VARIANTS}"
 
 # Scripts can override this to use extra fuzzing args and corpora
 FUZZER_EXTRA_CORPORA=${FUZZER_EXTRA_CORPORA:-}
@@ -182,130 +180,106 @@ profile_fuzzer() {
 compute_coverage() {
   local name="$1"
 
+  # The coverage is computed against the version without any variant. Except
+  # for noinstr, where we compute it against tpcg.
+  local reference="${name%%-*}"
+  if [ "$reference" = "noinstr" ]; then
+    reference="tpcg"
+  fi
+
   if ! [ -f "logs/coverage-${name}-${run_id}.log" ]; then
-    "./target-asan-pgo-${run_id}-build/fuzzer" -runs=0 "target-${name}-build/CORPUS-${run_id}" 2>&1 \
+    "./target-${reference}-build/fuzzer" -runs=0 "target-${name}-build/CORPUS-${run_id}" 2>&1 \
       | tee "logs/coverage-${name}-${run_id}.log"
   fi
 }
 
+# Estimate a good threshold to use for fuss in precise mode
+estimate_fprec_threshold() {
+  local prof="$1"
+
+  "$SCRIPT_DIR/alltimecounter_statistics.py" --log "logs/perf-${prof}.log" --costlevel $FPREC_COSTLEVEL
+}
+
 # Generate initial, pgo, and thresholded versions
 build_all() {
-  # Initial build; simply AddressSanitizer, no PGO, no ASAP.
-  build_target_and_fuzzer "asan-${run_id}" "$COVERAGE_ONLY_CFLAGS" "$COVERAGE_ONLY_LDFLAGS"
+  # Initial builds
+  if echo "$VARIANTS" | grep -q "asan"; then
+    build_target_and_fuzzer "asan" "$ASAN_CFLAGS" "$ASAN_CFLAGS"
+  fi
+  if echo "$VARIANTS" | grep -q "tpcg"; then
+    build_target_and_fuzzer "tpcg" "$TPCG_CFLAGS" "$TPCG_LDFLAGS"
+  fi
+  if echo "$VARIANTS" | grep -q "noinstr"; then
+    build_target_and_fuzzer "noinstr" "" "$TPCG_LDFLAGS"
+  fi
 
   # Run the fuzzer under perf. Use branch tracing because that's what
   # create_llvm_prof wants.
-  if ! [ -f "perf-data/perf-asan-${run_id}.llvm_prof" ]; then
-    test_fuzzer "asan-${run_id}"
-    profile_fuzzer "asan-${run_id}" "-b"
-  fi
-
-  # Build a baseline version that does not use FUSS at all.
-  LIBFUZZER_A="$WORK_DIR/Fuzzer-build/libFuzzer.a" build_target_and_fuzzer "asan-nofuss-${run_id}" \
-    "$COVERAGE_ONLY_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof" \
-    "$COVERAGE_ONLY_LDFLAGS"
-
-  # Re-build using profiling data.
-  build_target_and_fuzzer "asan-pgo-${run_id}" \
-    "$COVERAGE_ONLY_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof" \
-    "$COVERAGE_ONLY_LDFLAGS"
-
-  # Build and test various cost thresholds
-  for threshold in $THRESHOLDS; do
-    build_target_and_fuzzer "asap-${threshold}-${run_id}" \
-      "$COVERAGE_ONLY_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof -fsanitize=asap -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose" \
-      "$COVERAGE_ONLY_LDFLAGS"
+  for variant in "asan" "tpcg"; do
+    if echo "$VARIANTS" | grep -q "$variant"; then
+      if ! [ -f "perf-data/perf-${variant}-prof-${run_id}.llvm_prof" ]; then
+        rsync -a --delete "target-${variant}-build/" "target-${variant}-prof-${run_id}-build"
+        FUZZER_TESTING_SECONDS=$FUZZER_WARMUP_SECONDS test_fuzzer "${variant}-prof-${run_id}"
+        profile_fuzzer "${variant}-prof-${run_id}" "-b"
+      fi
+    fi
   done
 
-  # Create extra variants to measure how much each feature contributes to
-  # overhead and coverage.
+  # Create extra variants.
+  for variant in $VARIANTS; do
+    local cflags=
+    local ldflags=
+    local libfuzzer="$LIBFUZZER_A"
+    local base=
 
-  if echo "$VARIANTS" | grep -q icalls; then
-    build_target_and_fuzzer "asan-icalls-${run_id}" "$COVERAGE_ICALLS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof" "$COVERAGE_ICALLS_LDFLAGS"
-  fi
+    case "$variant" in
+      asan-*) cflags="$cflags $ASAN_CFLAGS"
+              ldflags="$ldflags $ASAN_LDFLAGS"
+              base="asan";;
+      tpcg-*) cflags="$cflags $TPCG_CFLAGS"
+              ldflags="$ldflags $TPCG_LDFLAGS"
+              base="tpcg";;
+    esac
+    case "$variant" in
+      *-nofuss*) libfuzzer="$WORK_DIR/Fuzzer-fuss-build/libFuzzer.a";;
+      *-fperf*) threshold="$FUZZER_PROFILING_SECONDS"
+                cflags="$cflags -fprofile-sample-use=$WORK_DIR/perf-data/perf-${base}-prof-${run_id}.llvm_prof -fsanitize=asap"
+                cflags="$cflags -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose";;
+      *-fprec*) threshold="$(estimate_fprec_threshold "${base}-prof-${run_id}")"
+                cflags="$cflags -fsanitize=asapcoverage"
+                cflags="$cflags -mllvm -asap-module-name=$WORK_DIR/target-${base}-prof-${run_id}-build/fuzzer"
+                cflags="$cflags -mllvm -asap-coverage-file=$WORK_DIR/logs/perf-${base}-prof-${run_id}.log"
+                cflags="$cflags -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose";;
+    esac
 
-  if echo "$VARIANTS" | grep -q edge; then
-    build_target_and_fuzzer "asan-edge-${run_id}" "$COVERAGE_EDGE_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof" "$COVERAGE_EDGE_LDFLAGS"
-  fi
-
-  if echo "$VARIANTS" | grep -q nocoverage; then
-    build_target_and_fuzzer "asan-nocoverage-${run_id}" "$COVERAGE_NONE_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof" "$COVERAGE_NONE_LDFLAGS"
-  fi
-
-  if echo "$VARIANTS" | grep -q noasan; then
-    build_target_and_fuzzer "asan-noasan-${run_id}" "$COVERAGE_ONLY_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof" "$COVERAGE_ONLY_LDFLAGS"
-  fi
-
-  if echo "$VARIANTS" | grep -q nochecks; then
-    build_target_and_fuzzer "asan-nochecks-${run_id}" "$COVERAGE_COUNTERS_CFLAGS $SANITIZE_NOCHECKS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof" "$COVERAGE_COUNTERS_LDFLAGS"
-  fi
-
-  if echo "$VARIANTS" | grep -q nopoison; then
-    build_target_and_fuzzer "asan-nopoison-${run_id}" "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof" "$COVERAGE_COUNTERS_LDFLAGS"
-  fi
-
-  if echo "$VARIANTS" | grep -q noquarantine; then
-    build_target_and_fuzzer "asan-noquarantine-${run_id}" "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof" "$COVERAGE_COUNTERS_LDFLAGS"
-  fi
-
-  if echo "$VARIANTS" | grep -q noelastic; then
-    build_target_and_fuzzer "asan-noelastic-${run_id}" "$COVERAGE_NONE_CFLAGS $SANITIZE_NOCHECKS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof" "$COVERAGE_NONE_LDFLAGS"
-  fi
-
-  if echo "$VARIANTS" | grep -q noinstrumentation; then
-    build_target_and_fuzzer "asan-noinstrumentation-${run_id}" "-fprofile-sample-use=$WORK_DIR/perf-data/perf-asan-${run_id}.llvm_prof" "$COVERAGE_ONLY_LDFLAGS"
-  fi
-
-  if echo "$VARIANTS" | grep -q asapcoverage; then
-    build_target_and_fuzzer "asan-asapcoverage-${run_id}" \
-      "$COVERAGE_ONLY_CFLAGS -fsanitize=asapcoverage -mllvm -asap-cost-threshold=100000 -mllvm -asap-verbose -mllvm -asap-module-name=$WORK_DIR/target-asan-${run_id}-build/fuzzer -mllvm -asap-coverage-file=$WORK_DIR/logs/perf-asan-${run_id}.log " \
-      "$COVERAGE_ONLY_LDFLAGS"
-  fi
+    case "$variant" in
+      *-nofuss*|*-fperf*|*-fprec*)
+        LIBFUZZER_A="$libfuzzer" build_target_and_fuzzer "${variant}-${run_id}" "$cflags" "$ldflags";;
+      asan|tpcg|noinstr)
+        [ -d "target-${variant}-${run_id}-build" ] || rsync -a --delete "target-${variant}-build/" "target-${variant}-${run_id}-build";;
+    esac
+  done
 }
 
 # Test all versions that have been built by build_all
 test_all() {
-  # Test the initial build.
-  test_fuzzer "asan-${run_id}"
-  compute_coverage "asan-${run_id}"
-
-  # When testing other versions, set all corpora to those of the initial build.
-  # This ensures each version can start with the same non-zero initial corpus.
-  for i in target-*-${run_id}-build; do
-    if [ "$i" != "target-asan-${run_id}-build" ]; then
-      rsync -a --delete "target-asan-${run_id}-build/CORPUS-$run_id/" "$i/CORPUS-$run_id"
-    fi
-  done
-
-  # Test the nofuss build.
-  test_fuzzer "asan-nofuss-${run_id}"
-  compute_coverage "asan-nofuss-${run_id}"
-
-  # Test the PGO build.
-  test_fuzzer "asan-pgo-${run_id}"
-  compute_coverage "asan-pgo-${run_id}"
-
-  # Test various cost thresholds
-  for threshold in $THRESHOLDS; do
-    test_fuzzer "asap-$threshold-${run_id}"
-    compute_coverage "asap-$threshold-${run_id}"
-  done
-
-  # Test extra variants to measure how much each feature contributes to
-  # overhead and coverage.
   for variant in $VARIANTS; do
-    if [ "$variant" = "nopoison" ]; then
-      ASAN_OPTIONS="$ASAN_OPTIONS:$SANITIZE_NOPOISON_OPTIONS" test_fuzzer "asan-nopoison-${run_id}"
-    elif [ "$variant" = "noquarantine" ]; then
-      ASAN_OPTIONS="$ASAN_OPTIONS:$SANITIZE_NOQUARANTINE_OPTIONS" test_fuzzer "asan-noquarantine-${run_id}"
-    elif [ "$variant" = "noinstrumentation" ]; then
-      FUZZER_EXTRA_ARGS="-benchmark=1" test_fuzzer "asan-noinstrumentation-${run_id}"
-    elif [ "$variant" = "noelastic" ]; then
-      FUZZER_EXTRA_ARGS="-benchmark=1" test_fuzzer "asan-noelastic-${run_id}"
-    else
-      test_fuzzer "asan-$variant-${run_id}"
+
+    # When testing, start with the corpus from the profiling build.
+    # This ensures each version can start with the same non-zero initial corpus.
+    local prof="${variant%%-*}"
+    if [ "$prof" = "noinstr" ]; then
+      prof="tpcg"
     fi
-    compute_coverage "asan-$variant-${run_id}"
+    rsync -a --delete "target-${prof}-prof-${run_id}-build/CORPUS-$run_id/" "target-${variant}-${run_id}-build/CORPUS-$run_id"
+
+    local extra_args=
+    case "$variant" in
+      noinstr) extra_args="-benchmark=1";;
+    esac
+
+    FUZZER_EXTRA_ARGS="$extra_args" test_fuzzer "${variant}-${run_id}"
+    compute_coverage "${variant}-${run_id}"
   done
 }
 
@@ -313,7 +287,7 @@ test_all() {
 print_summary() {
   local summary_versions="$@"
   if [ -z "$summary_versions"]; then
-    summary_versions="asan-${run_id} asan-nofuss-${run_id} asan-pgo-${run_id} $(for i in $THRESHOLDS; do echo asap-$i-${run_id}; done) $(for i in $VARIANTS; do echo asan-$i-${run_id}; done)"
+    summary_versions="$(for variant in $VARIANTS; do echo "${variant}-${run_id}"; done)"
   fi
 
   echo
@@ -350,9 +324,8 @@ usage() {
   echo "commands:"
   echo "  clean    - remove generated files"
   echo "  help     - show this help message"
-  echo "  build    - build initial, pgo, and thresholded versions"
-  echo "  longrun  - build and then run a target for a long time"
-  echo "  fuss     - initial build, initial fuzzing, profiling, recompilation, long fuzzing"
+  echo "  speed    - build variants, and measure their speed and coverage"
+  echo "  fuss     - initial build, warmup, profiling, recompilation, long fuzzing"
   echo "  baseline - like fuss, except without fussing :)"
 }
 
@@ -362,7 +335,7 @@ do_clean() {
 }
 
 # build: build initial, pgo, and thresholded versions
-do_build() {
+do_speed() {
   init_target
   init_libfuzzer
   build_all
@@ -380,51 +353,50 @@ do_fuss() {
     local start_time="$(date +%s)"
     local end_time="$((start_time + FUSS_TOTAL_SECONDS))"
 
-    # Build and test initial fuzzers. Note: we do want to re-build and
-    # re-profile these each run. Thus, the fuzzer name contains the run_id.
-    echo "fuss: building asan-${run_id} version. timestamp: $start_time"
-    build_target_and_fuzzer "fuss-asan-${run_id}" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
-    echo "fuss: testing asan-${run_id} version. timestamp: $(date +%s)"
-    FUZZER_TESTING_SECONDS=$FUSS_TESTING_SECONDS test_fuzzer "fuss-asan-${run_id}" || true
-    if compgen -G "target-fuss-asan-${run_id}-build/CORPUS-${run_id}/crash-*" > /dev/null; then
+    # Build initial fuzzer.
+    echo "fuss: building asan version. timestamp: $start_time"
+    build_target_and_fuzzer "asan" "$ASAN_CFLAGS" "$ASAN_CFLAGS"
+
+    # Warmup
+    echo "fuss: warming up asan-prof-${run_id} version. timestamp: $(date +%s)"
+    rsync -a --delete "target-asan-build/" "target-asan-prof-${run_id}-build"
+    FUZZER_TESTING_SECONDS=$FUZZER_WARMUP_SECONDS test_fuzzer "asan-prof-${run_id}" || true
+    if compgen -G "target-asan-prof-${run_id}-build/CORPUS-${run_id}/crash-*" > /dev/null; then
       echo "fuss: fuss end (found crash during initial testing). timestamp: $(date +%s)"
       exit 0
     fi
       
-    echo "fuss: profiling asan-${run_id} version. timestamp: $(date +%s)"
-    FUZZER_PROFILING_SECONDS=$FUSS_PROFILING_SECONDS profile_fuzzer "fuss-asan-${run_id}" "-b" || true
-    if compgen -G "target-fuss-asan-${run_id}-build/CORPUS-${run_id}/crash-*" > /dev/null; then
+    echo "fuss: profiling asan-prof-${run_id} version. timestamp: $(date +%s)"
+    profile_fuzzer "asan-prof-${run_id}" "-b" || true
+    if compgen -G "target-asan-prof-${run_id}-build/CORPUS-${run_id}/crash-*" > /dev/null; then
       echo "fuss: fuss end (found crash during profiling). timestamp: $(date +%s)"
       exit 0
     fi
 
     # Rebuild a high-quality fuzzer.
-    echo "fuss: building asap-$FUSS_THRESHOLD-${run_id} version. timestamp: $(date +%s)"
-    build_target_and_fuzzer "fuss-$FUSS_THRESHOLD-${run_id}" \
-      "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-fuss-asan-${run_id}.llvm_prof \
-      -fsanitize=asap -mllvm -asap-cost-threshold=$FUSS_THRESHOLD" \
-      "$COVERAGE_COUNTERS_LDFLAGS"
+    echo "fuss: building asan-fperf version. timestamp: $(date +%s)"
+    VARIANTS=asan-fperf build_all
 
     # Copy over the existing corpus (after all, we've earned that one)
-    cp -r "target-fuss-asan-${run_id}-build/CORPUS-${run_id}" "target-fuss-${FUSS_THRESHOLD}-${run_id}-build/CORPUS-${run_id}"
+    rsync -a --delete "target-asan-prof-${run_id}-build/CORPUS-$run_id/" "target-asan-fperf-${run_id}-build/CORPUS-$run_id"
     
     # And let the fuzzer run for some more time. We ignore crashes in the
     # fuzzer, and simply stop it when this occurs.
     local remaining="$((end_time - $(date +%s)))"
-    echo "fuss: testing asap-$FUSS_THRESHOLD version. timestamp: $(date +%s) remaining: $remaining"
-    FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "fuss-$FUSS_THRESHOLD-${run_id}" || true
+    echo "fuss: testing asan-fperf version. timestamp: $(date +%s) remaining: $remaining"
+    FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "asan-fperf-${run_id}" || true
     echo "fuss: fuss end. timestamp: $(date +%s)"
   ) | tee "logs/do_fuss-${run_id}.log"
 
   # Compute coverage. Carefully choose the right corpus; if a crash is found
-  # during initialization or profiling, then the fuss-$FUSS_THRESHOLD corpus
+  # during initialization or profiling, then the asan-fperf corpus
   # does not exist yet.
-  local corpus_for_coverage="target-fuss-${FUSS_THRESHOLD}-${run_id}-build/CORPUS-${run_id}"
+  local corpus_for_coverage="target-asan-fperf-${run_id}-build/CORPUS-${run_id}"
   if ! [ -d "$corpus_for_coverage" ]; then
-    corpus_for_coverage="target-fuss-asan-${run_id}-build/CORPUS-${run_id}"
+    corpus_for_coverage="target-asan-prof-${run_id}-build/CORPUS-${run_id}"
   fi
   "$SCRIPT_DIR/parse_libfuzzer_coverage_vs_time.py" \
-    --fuzzer "target-fuss-asan-${run_id}-build/fuzzer" \
+    --fuzzer "target-asan-build/fuzzer" \
     --corpus "$corpus_for_coverage" \
     < "logs/do_fuss-${run_id}.log" > "logs/do_fuss-${run_id}-coverage.tsv"
 }
@@ -440,7 +412,7 @@ do_baseline() {
     local end_time="$((start_time + FUSS_TOTAL_SECONDS))"
 
     echo "fuss: building baseline-${run_id} version. timestamp: $start_time"
-    build_target_and_fuzzer "baseline-${run_id}" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
+    build_target_and_fuzzer "baseline-${run_id}" "$ASAN_CFLAGS" "$ASAN_LDFLAGS"
     
     # And let the fuzzer run for some time. We ignore crashes in the fuzzer,
     # and simply stop it when this occurs.
@@ -452,91 +424,7 @@ do_baseline() {
 
   # Compute coverage
   "$SCRIPT_DIR/parse_libfuzzer_coverage_vs_time.py" \
-    --fuzzer "target-baseline-${run_id}-build/fuzzer" \
+    --fuzzer "target-asan-build/fuzzer" \
     --corpus "target-baseline-${run_id}-build/CORPUS-${run_id}" \
     < "logs/do_baseline-${run_id}.log" > "logs/do_baseline-${run_id}-coverage.tsv"
 }
-
-# longrun: build and then run a target for a long time
-do_longrun() {
-  GLOBAL_CORPUS="${GLOBAL_CORPUS:-$HOME/asap/fuzzing-corpora/$target}"
-  if ! [ -d "$GLOBAL_CORPUS" ]; then
-    echo "Please set \$GLOBAL_CORPUS." >&2
-    echo "Try:" >&2
-    echo "    export GLOBAL_CORPUS=\"$GLOBAL_CORPUS\"" >&2
-    echo "    git clone git@github.com:dslab-epfl/fuzzing-corpora.git \"$GLOBAL_CORPUS\"" >&2
-    exit 1
-  fi
-
-  init_target
-  init_libfuzzer
-  build_target_and_fuzzer "asan" "$COVERAGE_COUNTERS_CFLAGS" "$COVERAGE_COUNTERS_LDFLAGS"
-  profile_fuzzer "asan" "-b"
-
-  local threshold=200
-  build_target_and_fuzzer "asap-$threshold" \
-    "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asan.llvm_prof \
-    -fsanitize=asap -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose" \
-    "$COVERAGE_COUNTERS_LDFLAGS"
-
-  # Profile this fuzzer for a bit longer than usual.
-  # Note: we're not using any delay, because sometimes these fuzzers exit
-  # fairly quickly when they find a crash...
-  # TODO: it would be cool to profile using the full corpus, and to fix this
-  # crash-early issue.
-  mkdir -p "target-asap-${threshold}-build/CORPUS"
-  FUZZER_PROFILING_SECONDS=60 profile_fuzzer "asap-$threshold" "-b"
-
-  # Rebuild a high-quality fuzzer.
-  # Note that because we profiled during 60 seconds instead of the default 20,
-  # we set the threshold a bit higher, to 500. This is science we're doing :)
-  local longrun_threshold=500
-  build_target_and_fuzzer "longrun-$longrun_threshold" \
-    "$COVERAGE_COUNTERS_CFLAGS -fprofile-sample-use=$WORK_DIR/perf-data/perf-asap-${threshold}.llvm_prof \
-    -fsanitize=asap -mllvm -asap-cost-threshold=$longrun_threshold -mllvm -asap-verbose" \
-    "$COVERAGE_COUNTERS_LDFLAGS"
-  
-  # And let the long-running fuzzer run.
-  local workers=
-  if [ -n "$N_WORKERS" ]; then
-    workers="-workers=$N_WORKERS"
-  fi
-  cd "target-longrun-${longrun_threshold}-build"
-  mkdir -p "CORPUS"
-  "./fuzzer" \
-    -jobs=1000 $workers -print_pcs=1 -print_final_stats=1 -max_len=$MAX_LEN \
-    "CORPUS" "$GLOBAL_CORPUS"
-  cd ..
-}
-
-# benchmark: Measure execution speed of various versions
-do_benchmark() {
-  init_target
-  init_libfuzzer
-  build_all
-
-  local versions="asan asan-pgo $(for i in $THRESHOLDS; do echo asap-$i; done) $(for i in $VARIANTS; do echo asan-$i; done)"
-  local corpus_for_benchmark="$(ls -d target-asan-build/CORPUS-* | head -n1)"
-  local extra_asan_options=
-
-  echo
-  echo "Benchmark"
-  echo "========="
-  echo
-  (
-    for version in $versions; do
-      if [ "$version" = "asan-nopoison" ]; then
-        extra_asan_options="$SANITIZE_NOPOISON_OPTIONS"
-      elif [ "$version" = "asan-noquarantine" ]; then
-        extra_asan_options="$SANITIZE_NOQUARANTINE_OPTIONS"
-      fi
-
-      printf "%30s\t" "$version"
-      ASAN_OPTIONS="$ASAN_OPTIONS:$extra_asan_options" ./target-${version}-build/fuzzer \
-        -max_total_time=$FUZZER_BENCHMARKING_SECONDS \
-        -print_pcs=1 -print_final_stats=1 -benchmark=1 "$corpus_for_benchmark" 2>&1 | \
-        grep stat::number_of_executed_units | grep -o '[0-9]\+'
-    done
-  ) | tee "logs/benchmark-${run_id}.log"
-}
-
