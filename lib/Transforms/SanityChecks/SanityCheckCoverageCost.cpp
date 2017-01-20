@@ -232,8 +232,11 @@ bool SanityCheckCoverageCost::loadCoverage(const Module &M) {
   size_t LastOffset = (size_t)(-1);
   for (auto FO: FunctionsByOffset) {
     if (LastFunction != FO.second) {
-      assert(OffsetRanges.count(FO.second) == 0 && "non-contiguous functions?");
-      OffsetRanges[FO.second].first = LastOffset + 1;
+      if (OffsetRanges.count(FO.second) == 0) {
+        OffsetRanges[FO.second].first = LastOffset + 1;
+      } else {
+        dbgs() << "Warning: non-contiguous function: " << FO.second->getName() << "\n";
+      }
       if (LastFunction) {
         OffsetRanges[LastFunction].second = FO.first;
       }
