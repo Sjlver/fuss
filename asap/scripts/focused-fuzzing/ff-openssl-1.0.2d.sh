@@ -1,5 +1,7 @@
 # From https://github.com/google/fuzzer-test-suite/tree/master/openssl-1.0.1f
 
+FUZZER_EXTRA_ARGS="-max_len=512"
+
 get_git_revision() {
   GIT_REPO="$1"
   GIT_REVISION="$2"

@@ -1,6 +1,9 @@
 # From https://github.com/google/fuzzer-test-suite/tree/master/boringssl-2016-02-12
 
-# Init http-parser source code
+FUZZER_EXTRA_CORPORA="$WORK_DIR/boringssl-src/fuzz/privkey_corpus"
+ASAN_OPTIONS="${ASAN_OPTIONS}:detect_leaks=0:quarantine_size_mb=50"
+
+# Init boringssl source code
 init_target() {
   if ! [ -d boringssl-src ]; then
     git clone https://github.com/google/boringssl.git boringssl-src
