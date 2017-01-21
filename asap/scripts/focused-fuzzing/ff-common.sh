@@ -200,6 +200,11 @@ estimate_fprec_threshold() {
   "$SCRIPT_DIR/alltimecounter_statistics.py" --log "logs/perf-${prof}.log" --costlevel $FPREC_COSTLEVEL
 }
 
+# Estimate a good threshold for fuss when using perf
+estimate_fperf_threshold() {
+  echo $((FUZZER_PROFILING_SECONDS * N_FUZZER_JOBS))
+}
+
 # Generate initial, pgo, and thresholded versions
 build_all() {
   # Initial builds
@@ -242,7 +247,7 @@ build_all() {
     esac
     case "$variant" in
       *-nofuss*) libfuzzer="$WORK_DIR/Fuzzer-fuss-build/libFuzzer.a";;
-      *-fperf*) threshold="$FUZZER_PROFILING_SECONDS"
+      *-fperf*) threshold="$(estimate_fperf_threshold)"
                 cflags="$cflags -fprofile-sample-use=$WORK_DIR/perf-data/perf-${base}-prof-${run_id}.llvm_prof -fsanitize=asap"
                 cflags="$cflags -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose";;
       *-fprec*) threshold="$(estimate_fprec_threshold "${base}-prof-${run_id}")"
