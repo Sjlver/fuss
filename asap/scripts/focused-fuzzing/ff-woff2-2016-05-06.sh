@@ -1,4 +1,8 @@
-# From https://github.com/google/fuzzer-test-suite/tree/master/harfbuzz-1.3.2
+# From https://github.com/google/fuzzer-test-suite/tree/master/woff2-2016-05-06
+
+# On 1 core, found 38/40 crashes in one hour
+export OPTIMAL_N_CORES=1
+export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow|SUMMARY: libFuzzer: out-of-memory"
 
 FUZZER_EXTRA_CORPORA="$WORK_DIR/roboto"
 

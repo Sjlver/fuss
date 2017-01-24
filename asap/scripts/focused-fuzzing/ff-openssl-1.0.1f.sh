@@ -1,5 +1,9 @@
 # From https://github.com/google/fuzzer-test-suite/tree/master/openssl-1.0.1f
 
+# Crashes very quickly
+export OPTIMAL_N_CORES=1
+export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow"
+
 get_git_revision() {
   GIT_REPO="$1"
   GIT_REVISION="$2"

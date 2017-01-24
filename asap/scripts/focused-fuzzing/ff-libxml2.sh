@@ -1,3 +1,7 @@
+# Finds 12/40 crashes on two cores in one hour.
+export OPTIMAL_N_CORES=16
+export CRASH_REGEXP="AddressSanitizer: heap-buffer-overflow"
+
 LIBXML_CONFIGURE_ARGS="
       --enable-option-checking
       --disable-shared --disable-ipv6

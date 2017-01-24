@@ -1,5 +1,9 @@
 # From https://github.com/google/fuzzer-test-suite/tree/master/pcre2-10.00
 
+# Crashes very quickly. Has a variety of summary lines, like heap-buffer-overflow, stack-overflow, SEGV, heap-use-after-free
+export OPTIMAL_N_CORES=1
+export CRASH_REGEXP="SUMMARY: AddressSanitizer:"
+
 init_target() {
   if ! [ -d pcre2 ]; then
     svn checkout -r 183 svn://vcs.exim.org/pcre2/code/trunk pcre2

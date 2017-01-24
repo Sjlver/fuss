@@ -1,5 +1,9 @@
 # From https://github.com/google/fuzzer-test-suite/tree/master/boringssl-2016-02-12
 
+# On 4 cores (2 fuzzer jobs), found 10/40 crashes in one hour
+export OPTIMAL_N_CORES=16
+export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-use-after-free|SUMMARY: AddressSanitizer: double-free"
+
 FUZZER_EXTRA_CORPORA="$WORK_DIR/boringssl-src/fuzz/privkey_corpus"
 ASAN_OPTIONS="${ASAN_OPTIONS}:detect_leaks=0:quarantine_size_mb=50"
 

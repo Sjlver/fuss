@@ -1,5 +1,9 @@
 # From https://github.com/google/fuzzer-test-suite/tree/master/libxml2-v2.9.2
 
+# Finds crashes quickly, in approx. 200 seconds on a single core.
+export OPTIMAL_N_CORES=1
+export CRASH_REGEXP="AddressSanitizer: heap-buffer-overflow"
+
 LIBXML_CONFIGURE_ARGS="
       --enable-option-checking
       --disable-shared --disable-ipv6

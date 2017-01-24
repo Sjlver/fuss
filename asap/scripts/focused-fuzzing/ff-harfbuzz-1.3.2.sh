@@ -1,5 +1,11 @@
 # From https://github.com/google/fuzzer-test-suite/tree/master/harfbuzz-1.3.2
 
+# On 4 cores (2 fuzzer jobs), found 0/40 crashes in one hour. It starts to find
+# them with more cores. Let's also give it a bit more time.
+export OPTIMAL_N_CORES=40
+export OPTIMAL_FUZZER_TESTING_SECONDS="$((3*60*60))"
+export CRASH_REGEXP="Assertion .* failed"
+
 FUZZER_EXTRA_CORPORA="$WORK_DIR/harfbuzz-src/test/shaping/fonts/sha1sum"
 
 init_target() {

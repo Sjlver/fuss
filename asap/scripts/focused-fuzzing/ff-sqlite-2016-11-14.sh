@@ -1,5 +1,9 @@
 # From https://github.com/google/fuzzer-test-suite/tree/master/sqlite-2016-11-14
 
+# On 4 cores (2 fuzzer jobs), found 8/40 crashes in one hour
+export OPTIMAL_N_CORES=16
+export CRASH_REGEXP="SUMMARY: libFuzzer: out-of-memory"
+
 FUZZER_EXTRA_ARGS="-dict=$SCRIPT_DIR/sqlite-2016-11-14/sql.dict"
 
 init_target() {
