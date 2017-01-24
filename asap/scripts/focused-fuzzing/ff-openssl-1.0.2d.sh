@@ -1,4 +1,4 @@
-# From https://github.com/google/fuzzer-test-suite/tree/master/openssl-1.0.1f
+# From https://github.com/google/fuzzer-test-suite/tree/master/openssl-1.0.2d
 
 # Crashes rather quickly
 export OPTIMAL_N_CORES=1

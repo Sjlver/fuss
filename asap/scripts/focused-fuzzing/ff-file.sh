@@ -2,6 +2,7 @@
 init_target() {
   if ! [ -d file ]; then
     git clone https://github.com/file/file.git
+    (cd file && git checkout 0e93a47b7feaee1d3a0f1b14e40f0ead17d8ccd4)
     (cd file && autoreconf -f -i)
   fi
 }
