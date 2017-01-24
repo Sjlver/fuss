@@ -135,11 +135,16 @@ test_fuzzer() {
       | tee "logs/fuzzer-${name}-${run_id}.log"
     cd "target-${name}-build"
     mkdir -p "CORPUS-${run_id}"
-    "./fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
-      -print_pcs=1 -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
-      -artifact_prefix="CORPUS-${run_id}/" \
-      $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
-      | tee -a "../logs/fuzzer-${name}-${run_id}.log"
+
+    # We've seen instances of runaway fuzzers; Limit its CPU time to be sure.
+    (
+      ulimit -t $((N_FUZZER_JOBS * FUZZER_TESTING_SECONDS + 10))
+      "./fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
+        -print_pcs=1 -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
+        -artifact_prefix="CORPUS-${run_id}/" \
+        $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
+        | tee -a "../logs/fuzzer-${name}-${run_id}.log"
+    )
     cd ..
   fi
 }
@@ -158,12 +163,17 @@ profile_fuzzer() {
       echo "profile_fuzzer: ${name} timestamp: $(date +%s)" \
         | tee "logs/perf-${name}.log"
       cd "target-${name}-build"
-      perf record $perf_args -o "../perf-data/perf-${name}.data" \
-        "./fuzzer" -max_total_time=$FUZZER_PROFILING_SECONDS \
-        -print_pcs=1 -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
-        -artifact_prefix="CORPUS-${run_id}/" \
-        $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
-        | tee -a "../logs/perf-${name}.log"
+
+      # We've seen instances of runaway fuzzers; Limit its CPU time to be sure.
+      (
+        ulimit -t $((N_FUZZER_JOBS * FUZZER_PROFILING_SECONDS + 10))
+        perf record $perf_args -o "../perf-data/perf-${name}.data" \
+          "./fuzzer" -max_total_time=$FUZZER_PROFILING_SECONDS \
+          -print_pcs=1 -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
+          -artifact_prefix="CORPUS-${run_id}/" \
+          $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
+          | tee -a "../logs/perf-${name}.log"
+      )
       cd ..
     ) 9>"/tmp/asap_global_perf_lock"
   fi
