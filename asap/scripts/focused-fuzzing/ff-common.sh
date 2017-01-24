@@ -417,7 +417,8 @@ do_baseline() {
     local end_time="$((start_time + FUSS_TOTAL_SECONDS))"
 
     echo "fuss: building baseline-${run_id} version. timestamp: $start_time"
-    build_target_and_fuzzer "baseline-${run_id}" "$ASAN_CFLAGS" "$ASAN_LDFLAGS"
+    build_target_and_fuzzer "asan" "$ASAN_CFLAGS" "$ASAN_LDFLAGS"
+    rsync -a --delete "target-asan-build/" "target-baseline-${run_id}-build"
     
     # And let the fuzzer run for some time. We ignore crashes in the fuzzer,
     # and simply stop it when this occurs.

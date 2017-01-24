@@ -23,7 +23,7 @@ def main():
     for data_file in args.data:
         with open(data_file) as f:
             header = f.readline()
-            assert re.match(r'^time\s+coverage\s+bits\s+units\s+execs\s*$', header)
+            assert re.match(r'^time\s+coverage\s+ft\s+units\s+execs\s*$', header)
             data.append(np.loadtxt(f))
 
     plt.title('Coverage and executions vs time')
