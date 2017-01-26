@@ -282,11 +282,15 @@ test_all() {
 
     # When testing, start with the corpus from the profiling build.
     # This ensures each version can start with the same non-zero initial corpus.
+    # In addition, minimize the corpus. This reduces bias against the noinstr
+    # version, which cannot do corpus minimization itself.
     local prof="${variant%%-*}"
     if [ "$prof" = "noinstr" ]; then
       prof="tpcg"
     fi
-    rsync -a --delete "target-${prof}-prof-${run_id}-build/CORPUS-$run_id/" "target-${variant}-${run_id}-build/CORPUS-$run_id"
+    rm -rf "target-${variant}-${run_id}-build/CORPUS-$run_id"
+    mkdir "target-${variant}-${run_id}-build/CORPUS-$run_id"
+    "./target-${prof}-prof-${run_id}-build/fuzzer" -merge=1 "target-${variant}-${run_id}-build/CORPUS-$run_id" "target-${prof}-prof-${run_id}-build/CORPUS-$run_id/"
 
     local extra_args=
     case "$variant" in

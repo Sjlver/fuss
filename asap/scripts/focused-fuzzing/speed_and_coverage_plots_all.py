@@ -35,6 +35,8 @@ COLORS = {
         'noinstr': CMAP(1.0),
 }
 
+VERSIONS = ['asan', 'asan-fperf', 'tpcg', 'tpcg-fperf', 'noinstr']
+
 def load_data(data_files):
     data = []
     for data_file in data_files:
@@ -80,11 +82,10 @@ def main():
 
     fig, ax = plt.subplots()
     benchmarks = medians.index.levels[0]
-    versions = ['asan', 'asan-fperf', 'tpcg', 'tpcg-fperf', 'noinstr']
-    bar_width = 1.0 / (len(versions) + 2)
+    bar_width = 1.0 / (len(VERSIONS) + 2)
     xs = np.arange(len(benchmarks))
     
-    for i, version in enumerate(versions):
+    for i, version in enumerate(VERSIONS):
         plt.bar(xs + (i + 1) * bar_width,
                 medians.loc[:, version, 'estimate'],
                 bar_width,
@@ -96,7 +97,8 @@ def main():
     plt.xlabel("Benchmark")
     plt.xlim(0, len(benchmarks))
     plt.ylabel("Executions (rel. to noinstr)")
-    plt.xticks(xs + (len(versions) / 2 + 1) * bar_width, benchmarks)
+    plt.xticks(xs + (len(VERSIONS) / 2 + 1) * bar_width, benchmarks)
+    plt.grid(True, axis='y')
     
     fig.set_size_inches(15, 5)
     if args.output:
