@@ -3,7 +3,7 @@
 # This uses a buggy version of file, with a 1-byte overflow when processing
 # "der" rules. Crashes fairly quickly.
 export OPTIMAL_N_CORES=1
-export CRASH_REGEXP="AddressSanitizer: heap-buffer-overflow"
+export CRASH_REGEXP="AddressSanitizer: heap-buffer-overflow|AddressSanitizer: SEGV"
 
 # Initialize the "file" source code
 init_target() {

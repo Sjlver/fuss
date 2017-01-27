@@ -2,7 +2,7 @@
 
 # On 4 cores (2 fuzzer jobs), found 8/40 crashes in one hour
 export OPTIMAL_N_CORES=16
-export CRASH_REGEXP="SUMMARY: libFuzzer: out-of-memory"
+export CRASH_REGEXP="libFuzzer: out-of-memory|AddressSanitizer: heap-use-after-free|AddressSanitizer: heap-buffer-overflow"
 
 FUZZER_EXTRA_ARGS="-dict=$SCRIPT_DIR/sqlite-2016-11-14/sql.dict"
 

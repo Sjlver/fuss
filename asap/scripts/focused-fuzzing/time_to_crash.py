@@ -94,6 +94,7 @@ def main():
         ))
 
     print()
+    print("{:20s}\t{:8s}\t{:7}\t{:>8s}\t{:>8s}\t{:>8s}".format('benchmark', 'version', 'crashes', 'build', 'fuzz', 'rebuild'))
     for d in valid_experiments:
         print("{benchmark:20s}\t{version:8s}\t{crashes:1}\t{build:8.1f}\t{fuzz:8.1f}\t{rebuild:8.1f}".format(benchmark=args.benchmark, **d))
 
