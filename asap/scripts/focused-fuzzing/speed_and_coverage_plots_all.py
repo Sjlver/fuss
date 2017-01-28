@@ -49,7 +49,7 @@ def load_data(data_files):
         cur_data['run_id'] = int(m.group(2))
         cur_data.set_index(['benchmark', 'name', 'run_id'], inplace=True)
         cur_data['execs'] = normalize_execs(cur_data['execs'])
-        cur_data['actual_cov'] = normalize_coverage(cur_data['actual_cov'])
+        cur_data['actual_cov'] = normalize_coverage(cur_data)
         data.append(cur_data)
     data = pd.concat(data)
     return data
@@ -76,10 +76,7 @@ def normalize_execs(execs):
 def normalize_coverage(cov):
     """Compute coverage deltas"""
 
-    # FIXME: normalization (i.e., subtracting noinstr coverage) is not quite
-    # correct for asan, because we don't know the initial coverage in this
-    # case. ASan and TPCG use different initial corpora for the moment.
-    return np.maximum(0, cov - float(cov.loc[:, 'noinstr', :]))
+    return cov['actual_cov'] - cov['init_cov']
 
 def normalize_aggregated_coverage(cov):
     """Normalize coverage; scale them relative to no-fuss version."""
@@ -125,6 +122,8 @@ def main():
     plt.ylabel("Executions (rel. to noinstr)")
     plt.xticks(xs + (len(VERSIONS) / 2 + 1) * bar_width, benchmarks)
     plt.grid(True, axis='y')
+
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=len(VERSIONS))
     
     fig.set_size_inches(12, 4)
     if args.output_execs:

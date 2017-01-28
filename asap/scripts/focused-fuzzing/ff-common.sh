@@ -236,6 +236,15 @@ build_all() {
         rsync -a --delete "target-${variant}-build/" "target-${variant}-prof-${run_id}-build"
         FUZZER_TESTING_SECONDS=$FUZZER_WARMUP_SECONDS test_fuzzer "${variant}-prof-${run_id}"
         profile_fuzzer "${variant}-prof-${run_id}" "-b"
+
+        # Minimize the corpus of this build, and compute it's coverage. We're
+        # re-using its corpus later as initial corpus, and so knowing the
+        # coverage is useful.
+        mv "target-${variant}-prof-${run_id}-build/CORPUS-$run_id" "target-${variant}-prof-${run_id}-build/CORPUS-${run_id}-OLD"
+        mkdir "target-${variant}-prof-${run_id}-build/CORPUS-$run_id"
+        "./target-${variant}-prof-${run_id}-build/fuzzer" -merge=1 "target-${variant}-prof-${run_id}-build/CORPUS-$run_id" "target-${variant}-prof-${run_id}-build/CORPUS-${run_id}-OLD"
+        rm -r "target-${variant}-prof-${run_id}-build/CORPUS-${run_id}-OLD"
+        compute_coverage "${variant}-prof-${run_id}"
       fi
     fi
   done
@@ -282,15 +291,11 @@ test_all() {
 
     # When testing, start with the corpus from the profiling build.
     # This ensures each version can start with the same non-zero initial corpus.
-    # In addition, minimize the corpus. This reduces bias against the noinstr
-    # version, which cannot do corpus minimization itself.
     local prof="${variant%%-*}"
     if [ "$prof" = "noinstr" ]; then
       prof="tpcg"
     fi
-    rm -rf "target-${variant}-${run_id}-build/CORPUS-$run_id"
-    mkdir "target-${variant}-${run_id}-build/CORPUS-$run_id"
-    "./target-${prof}-prof-${run_id}-build/fuzzer" -merge=1 "target-${variant}-${run_id}-build/CORPUS-$run_id" "target-${prof}-prof-${run_id}-build/CORPUS-$run_id/"
+    rsync -a --delete "target-${prof}-prof-${run_id}-build/CORPUS-$run_id/" "target-${variant}-${run_id}-build/CORPUS-$run_id"
 
     local extra_args=
     case "$variant" in
@@ -314,7 +319,7 @@ print_summary() {
   echo "======="
   echo
   (
-    printf "%30s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%12s\n" "name" "cov" "ft" "execs" "execs_per_sec" "units" "actual_cov" "actual_ft" "tpcg"
+    printf "%30s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%12s\n" "name" "cov" "ft" "execs" "execs_per_sec" "units" "init_cov" "init_ft" "actual_cov" "actual_ft" "tpcg"
 
     for name in $summary_versions; do
       # Get cov, ft from the last output line
@@ -327,11 +332,19 @@ print_summary() {
       units="$(grep 'stat::new_units_added:' logs/fuzzer-${name}-${run_id}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
       tpcg="$(grep 'stat::total_tpcg_count:' logs/fuzzer-${name}-${run_id}.log | grep -o '[0-9]*' | sort -n | tail -n1)"
 
-      # Get actual coverage from running the corpus against the PGO version
+      # Get the initial coverage; that's the coverage from the profiling build
+      local prof="${name%%-*}"
+      if [ "$prof" = "noinstr" ]; then
+        prof="tpcg"
+      fi
+      init_cov="$(grep '#[0-9]*.*DONE' logs/coverage-${prof}-prof-${run_id}-${run_id}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
+      init_ft="$(grep '#[0-9]*.*DONE' logs/coverage-${prof}-prof-${run_id}-${run_id}.log | grep -o 'ft: [0-9]*' | grep -o '[0-9]*')"
+
+      # Get actual coverage from running the corpus against the base version
       actual_cov="$(grep '#[0-9]*.*DONE' logs/coverage-${name}-${run_id}.log | grep -o 'cov: [0-9]*' | grep -o '[0-9]*')"
       actual_ft="$(grep '#[0-9]*.*DONE' logs/coverage-${name}-${run_id}.log | grep -o 'ft: [0-9]*' | grep -o '[0-9]*')"
 
-      printf "%30s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%12s\n" "$name" "$cov" "$ft" "$execs" "$execs_per_sec" "$units" "$actual_cov" "$actual_ft" "$tpcg"
+      printf "%30s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%12s\n" "$name" "$cov" "$ft" "$execs" "$execs_per_sec" "$units" "$init_cov" "$init_ft" "$actual_cov" "$actual_ft" "$tpcg"
     done
   ) | tee "logs/summary-${run_id}.log"
 }
