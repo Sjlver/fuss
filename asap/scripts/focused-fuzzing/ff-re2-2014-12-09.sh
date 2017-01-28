@@ -1,7 +1,7 @@
 # From https://github.com/google/fuzzer-test-suite/tree/master/re2-2014-12-09
 
-# On 4 cores (2 fuzzer jobs), found 5/40 crashes in one hour
-export OPTIMAL_N_CORES=20
+# On 20 cores (18 fuzzer jobs), found about 40% of the crashes in one hour
+export OPTIMAL_N_CORES=40
 export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow|SUMMARY: libFuzzer: out-of-memory"
 
 get_git_revision() {
