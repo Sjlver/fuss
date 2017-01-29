@@ -1,8 +1,11 @@
 # From https://github.com/google/fuzzer-test-suite/tree/master/re2-2014-12-09
 
 # On 20 cores (18 fuzzer jobs), found about 40% of the crashes in one hour
+# Note: this one will often stop with out-of-memory too... but I believe that's
+# a leak, not a special testcase.
+# Not sure how to handle the fact that this slows down fuzzing.
 export OPTIMAL_N_CORES=40
-export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow|SUMMARY: libFuzzer: out-of-memory"
+export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow"
 
 get_git_revision() {
   GIT_REPO="$1"
