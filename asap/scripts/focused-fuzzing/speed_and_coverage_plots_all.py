@@ -45,7 +45,7 @@ def load_data(data_files):
             raise ValueError("Unexpected data file name: " + data_file)
         cur_data = pd.read_table(data_file, sep=r'\s*\t\s*', engine='python')
         cur_data['benchmark'] = BENCHMARK_NAMES_MAP[m.group(1)]
-        cur_data['name'] = cur_data['name'].map(lambda n: re.sub('-\d\d$', '', n))
+        cur_data['name'] = cur_data['name'].map(lambda n: re.sub('-\d+$', '', n))
         cur_data['run_id'] = int(m.group(2))
         cur_data.set_index(['benchmark', 'name', 'run_id'], inplace=True)
         cur_data['execs'] = normalize_execs(cur_data['execs'])
