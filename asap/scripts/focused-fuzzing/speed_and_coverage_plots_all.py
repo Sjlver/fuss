@@ -104,17 +104,17 @@ def main():
     xs = np.arange(len(benchmarks))
     bar_width = 1.0 / (len(VERSIONS) + 2)
 
-    # Plot median executions
-    medians = grouped['execs'].apply(lambda s: bootstrap_ci(s, np.median))
+    # Plot mean executions
+    means = grouped['execs'].apply(lambda s: bootstrap_ci(s, np.mean))
 
     fig = plt.figure()
     for i, version in enumerate(VERSIONS):
         plt.bar(xs + (i + 1) * bar_width,
-                medians.loc[:, version, 'estimate'],
+                means.loc[:, version, 'estimate'],
                 bar_width,
                 color=COLORS[version],
-                yerr=(medians.loc[:, version, 'estimate'] - medians.loc[:, version, 'lower'],
-                    medians.loc[:, version, 'upper'] - medians.loc[:, version, 'estimate']),
+                yerr=(means.loc[:, version, 'estimate'] - means.loc[:, version, 'lower'],
+                    means.loc[:, version, 'upper'] - means.loc[:, version, 'estimate']),
                 label=version)
 
     plt.xlabel("Benchmark")
@@ -132,17 +132,17 @@ def main():
         plt.show()
 
     # A similar plot for coverage increase instead of executions
-    medians = grouped['actual_cov'].apply(lambda s: bootstrap_ci(s, np.median))
-    medians = medians.groupby(level='benchmark').transform(normalize_aggregated_coverage)
+    means = grouped['actual_cov'].apply(lambda s: bootstrap_ci(s, np.mean))
+    means = means.groupby(level='benchmark').transform(normalize_aggregated_coverage)
 
     fig = plt.figure()
     for i, version in enumerate(VERSIONS):
         plt.bar(xs + (i + 1) * bar_width,
-                medians.loc[:, version, 'estimate'],
+                means.loc[:, version, 'estimate'],
                 bar_width,
                 color=COLORS[version],
-                yerr=(medians.loc[:, version, 'estimate'] - medians.loc[:, version, 'lower'],
-                    medians.loc[:, version, 'upper'] - medians.loc[:, version, 'estimate']),
+                yerr=(means.loc[:, version, 'estimate'] - means.loc[:, version, 'lower'],
+                    means.loc[:, version, 'upper'] - means.loc[:, version, 'estimate']),
                 label=version)
 
     plt.xlabel("Benchmark")
