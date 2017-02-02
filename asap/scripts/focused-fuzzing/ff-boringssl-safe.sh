@@ -9,6 +9,7 @@ init_target() {
     (
       cd boringssl-src
       git checkout c0263ab4c85d9b0f4b5d667a857a0ad509ce6a9b
+      git am "$SCRIPT_DIR/ff-boringssl-safe.patch"
     )
   fi
 }
