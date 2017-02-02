@@ -5,7 +5,7 @@
 # a leak, not a special testcase.
 # Not sure how to handle the fact that this slows down fuzzing.
 export OPTIMAL_N_CORES=40
-export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow"
+export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow|SUMMARY: AddressSanitizer: bad-free|SUMMARY: AddressSanitizer: heap-use-after-free"
 
 get_git_revision() {
   GIT_REPO="$1"

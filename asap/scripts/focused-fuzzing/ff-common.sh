@@ -133,19 +133,51 @@ test_fuzzer() {
   if ! [ -f "logs/fuzzer-${name}-${run_id}.log" ]; then
     echo "test_fuzzer: ${name} run_id: ${run_id} timestamp: $(date +%s)" \
       | tee "logs/fuzzer-${name}-${run_id}.log"
-    cd "target-${name}-build"
-    mkdir -p "CORPUS-${run_id}"
 
-    # We've seen instances of runaway fuzzers; Limit its CPU time to be sure.
     (
+      cd "target-${name}-build"
+      mkdir -p "CORPUS-${run_id}"
+
+      # We've seen instances of runaway fuzzers; Limit its CPU time to be sure.
       ulimit -t $((N_FUZZER_JOBS * FUZZER_TESTING_SECONDS + 10))
       "./fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
         -print_pcs=1 -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
         -artifact_prefix="CORPUS-${run_id}/" \
         $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
         | tee -a "../logs/fuzzer-${name}-${run_id}.log"
+
+      cd ..
     )
-    cd ..
+  fi
+}
+
+# Run the fuzzer with the given `name` until it finds a crash, or up to the
+# limit given by FUZZER_TESTING_SECONDS.
+#
+# This is similar to test_fuzzer, except that it tries to work around transient
+# crashes (out of memory, for example) by using a higher number of jobs.
+#
+# Note that this will lead to logs that might be confusing to parse :(
+search_crash() {
+  local name="$1"
+
+  if ! [ -f "logs/fuzzer-${name}-${run_id}.log" ]; then
+    echo "test_fuzzer: ${name} run_id: ${run_id} timestamp: $(date +%s)" \
+      | tee "logs/fuzzer-${name}-${run_id}.log"
+    (
+      cd "target-${name}-build"
+      mkdir -p "CORPUS-${run_id}"
+
+      ulimit -t $((N_FUZZER_JOBS * FUZZER_TESTING_SECONDS + 10))
+      timeout --kill-after=10 "$FUZZER_TESTING_SECONDS" \
+        "./fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
+        -print_pcs=1 -print_final_stats=1 -jobs=$((10 * N_FUZZER_JOBS)) -workers=$N_FUZZER_JOBS \
+        -artifact_prefix="CORPUS-${run_id}/" \
+        $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
+        | tee -a "../logs/fuzzer-${name}-${run_id}.log"
+
+      cd ..
+    )
   fi
 }
 
@@ -393,14 +425,14 @@ do_fuss() {
     echo "fuss: warming up asan-prof-${run_id} version. timestamp: $(date +%s)"
     rsync -a --delete "target-asan-build/" "target-asan-prof-${run_id}-build"
     FUZZER_TESTING_SECONDS=$FUZZER_WARMUP_SECONDS test_fuzzer "asan-prof-${run_id}" || true
-    if compgen -G "target-asan-prof-${run_id}-build/CORPUS-${run_id}/crash-*" > /dev/null; then
+    if grep -q -P "$CRASH_REGEXP" "logs/fuzzer-asan-prof-${run_id}-${run_id}.log"; then
       echo "fuss: fuss end (found crash during initial testing). timestamp: $(date +%s)"
       exit 0
     fi
       
     echo "fuss: profiling asan-prof-${run_id} version. timestamp: $(date +%s)"
     profile_fuzzer "asan-prof-${run_id}" "-b" || true
-    if compgen -G "target-asan-prof-${run_id}-build/CORPUS-${run_id}/crash-*" > /dev/null; then
+    if grep -q -P "$CRASH_REGEXP" "logs/perf-asan-prof-${run_id}.log"; then
       echo "fuss: fuss end (found crash during profiling). timestamp: $(date +%s)"
       exit 0
     fi
@@ -416,7 +448,7 @@ do_fuss() {
     # fuzzer, and simply stop it when this occurs.
     local remaining="$((end_time - $(date +%s)))"
     echo "fuss: testing asan-fperf version. timestamp: $(date +%s) remaining: $remaining"
-    FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "asan-fperf-${run_id}" || true
+    FUZZER_TESTING_SECONDS="$remaining" search_crash "asan-fperf-${run_id}" || true
     echo "fuss: fuss end. timestamp: $(date +%s)"
   ) | tee "logs/do_fuss-${run_id}.log"
 
@@ -451,7 +483,7 @@ do_baseline() {
     # and simply stop it when this occurs.
     local remaining="$((end_time - $(date +%s)))"
     echo "fuss: testing baseline-${run_id} version. timestamp: $(date +%s) remaining: $remaining"
-    FUZZER_TESTING_SECONDS="$remaining" test_fuzzer "baseline-${run_id}" || true
+    FUZZER_TESTING_SECONDS="$remaining" search_crash "baseline-${run_id}" || true
     echo "fuss: baseline end. timestamp: $(date +%s)"
   ) | tee "logs/do_baseline-${run_id}.log"
 
