@@ -33,7 +33,7 @@ build_target_and_fuzzer() {
 
     CC="$CC" CXX="$CXX" ./Configure $DEFAULT_CFLAGS $extra_cflags linux-x86_64 2>&1  | tee "../logs/build-${name}.log"
     # Weird... make seems to fail the first time?
-    (make -j $N_CORES || make -j $N_CORES) 2>&1 | tee -a "../logs/build-${name}.log"
+    (make -j $N_CORES libssl.a libcrypto.a || make -j $N_CORES libssl.a libcrypto.a) 2>&1 | tee -a "../logs/build-${name}.log"
 
     "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
       -I include -DCERT_PATH="\"$SCRIPT_DIR/\"" \

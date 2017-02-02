@@ -1,4 +1,4 @@
---- sqlite3.patched.c	2017-01-20 13:31:35.092970610 +0000
+--- sqlite3.c	2017-01-20 13:31:35.092970610 +0000
 +++ sqlite3.c	2017-01-20 13:34:58.793765230 +0000
 @@ -15605,15 +15605,15 @@
    } aColCache[SQLITE_N_COLCACHE];  /* One for each column cache entry */

@@ -1,15 +1,10 @@
-# From https://github.com/google/fuzzer-test-suite/tree/master/sqlite-2016-11-14
-
-# On 4 cores (2 fuzzer jobs), found 8/40 crashes in one hour
-export OPTIMAL_N_CORES=16
-export CRASH_REGEXP="libFuzzer: out-of-memory|AddressSanitizer: heap-use-after-free|AddressSanitizer: heap-buffer-overflow"
-
-FUZZER_EXTRA_ARGS="-dict=$SCRIPT_DIR/sqlite-2016-11-14/sql.dict"
+. "$SCRIPT_DIR/ff-sqlite-2016-11-14.sh"
 
 init_target() {
   if ! [ -d sqlite3-src ]; then
     cp -r "$SCRIPT_DIR/sqlite-2016-11-14/" sqlite3-src
   fi
+  (cd sqlite3-src && patch < "$SCRIPT_DIR/sqlite-2016-11-14/sqlite3.patch")
 }
 
 build_target_and_fuzzer() {
