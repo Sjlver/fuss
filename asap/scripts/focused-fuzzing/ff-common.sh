@@ -454,18 +454,6 @@ do_fuss() {
     FUZZER_TESTING_SECONDS="$remaining" search_crash "asan-fperf-${run_id}" || true
     echo "fuss: fuss end. timestamp: $(date +%s)"
   ) | tee "logs/do_fuss-${run_id}.log"
-
-  # Compute coverage. Carefully choose the right corpus; if a crash is found
-  # during initialization or profiling, then the asan-fperf corpus
-  # does not exist yet.
-  local corpus_for_coverage="target-asan-fperf-${run_id}-build/CORPUS-${run_id}"
-  if ! [ -d "$corpus_for_coverage" ]; then
-    corpus_for_coverage="target-asan-prof-${run_id}-build/CORPUS-${run_id}"
-  fi
-  "$SCRIPT_DIR/parse_libfuzzer_coverage_vs_time.py" \
-    --fuzzer "target-asan-build/fuzzer" \
-    --corpus "$corpus_for_coverage" \
-    < "logs/do_fuss-${run_id}.log" > "logs/do_fuss-${run_id}-coverage.tsv"
 }
 
 # baseline: A complete iteration of fuss, except that it doesn't use fuss. This
@@ -492,10 +480,4 @@ do_baseline() {
     FUZZER_TESTING_SECONDS="$remaining" search_crash "baseline-${run_id}" || true
     echo "fuss: baseline end. timestamp: $(date +%s)"
   ) | tee "logs/do_baseline-${run_id}.log"
-
-  # Compute coverage
-  "$SCRIPT_DIR/parse_libfuzzer_coverage_vs_time.py" \
-    --fuzzer "target-asan-build/fuzzer" \
-    --corpus "target-baseline-${run_id}-build/CORPUS-${run_id}" \
-    < "logs/do_baseline-${run_id}.log" > "logs/do_baseline-${run_id}-coverage.tsv"
 }
