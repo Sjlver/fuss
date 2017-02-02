@@ -297,7 +297,7 @@ build_all() {
               base="tpcg";;
     esac
     case "$variant" in
-      *-nofuss*) libfuzzer="$WORK_DIR/Fuzzer-fuss-build/libFuzzer.a";;
+      *-nofuss*) libfuzzer="$WORK_DIR/Fuzzer-build/libFuzzer.a";;
       *-fperf*) threshold="$(estimate_fperf_threshold)"
                 cflags="$cflags -fprofile-sample-use=$WORK_DIR/perf-data/perf-${base}-prof-${run_id}.llvm_prof -fsanitize=asap"
                 cflags="$cflags -mllvm -asap-cost-threshold=$threshold -mllvm -asap-verbose";;
@@ -413,6 +413,9 @@ do_fuss() {
   init_target
   init_libfuzzer
 
+  # For this type of experiment, always use the non-fuss build of LibFuzzer
+  LIBFUZZER_A="$WORK_DIR/Fuzzer-build/libFuzzer.a"
+
   (
     local start_time="$(date +%s)"
     local end_time="$((start_time + FUSS_TOTAL_SECONDS))"
@@ -470,6 +473,9 @@ do_fuss() {
 do_baseline() {
   init_target
   init_libfuzzer
+
+  # For this type of experiment, always use the non-fuss build of LibFuzzer
+  LIBFUZZER_A="$WORK_DIR/Fuzzer-build/libFuzzer.a"
 
   (
     local start_time="$(date +%s)"
