@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Plots graphs for speed and coverage obtained by various fuzzer versions."""
+"""Creates a cumulative distribution plot for instrumentation atom executions."""
 
 import argparse
 import re

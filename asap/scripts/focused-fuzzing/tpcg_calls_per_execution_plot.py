@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Plots graphs for speed and coverage obtained by various fuzzer versions."""
+"""Computes the number of `trace_pc_guard` calls per execution."""
 
 import argparse
 import sys
@@ -18,7 +18,7 @@ def bootstrap_ci(s, f, confidence=0.95):
 
     Takes a series `s` and a function `f`. Returns a Series containing
     the estimate and its lower/upper bounds.
-    !!! Fom speed_and_coverage_plots_all.py
+    !!! From speed_and_coverage_plots_all.py
     !!! TODO: refactoring
     """
 
@@ -32,7 +32,6 @@ def bootstrap_ci(s, f, confidence=0.95):
 
 def main():
     parser = argparse.ArgumentParser(description="Plot tpcg calls per execution.")
-    parser.add_argument("--output", help="Output file to save plot to")
     parser.add_argument("--benchmark", help="Name of the benchmark", required=True)
     parser.add_argument("--data", help="Input file", required=True)
     args = parser.parse_args()
