@@ -3,8 +3,8 @@
 init_target() {
   if ! [ -d sqlite3-src ]; then
     cp -r "$SCRIPT_DIR/sqlite-2016-11-14/" sqlite3-src
+    (cd sqlite3-src && patch < "$SCRIPT_DIR/sqlite-2016-11-14/sqlite3.patch")
   fi
-  (cd sqlite3-src && patch < "$SCRIPT_DIR/sqlite-2016-11-14/sqlite3.patch")
 }
 
 build_target_and_fuzzer() {

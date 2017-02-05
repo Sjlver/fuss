@@ -1,0 +1,24 @@
+From a0273eb72d8f67c3eff851acf595833b8f6c167c Mon Sep 17 00:00:00 2001
+From: Jonas Wagner <jonas.wagner@epfl.ch>
+Date: Thu, 2 Feb 2017 18:40:21 +0000
+Subject: [PATCH] Add missing #include <cstdint>
+
+---
+ fuzz/privkey.cc | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/fuzz/privkey.cc b/fuzz/privkey.cc
+index 0627695..9866259 100644
+--- a/fuzz/privkey.cc
++++ b/fuzz/privkey.cc
+@@ -12,6 +12,7 @@
+  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+ 
++#include <cstdint>
+ #include <openssl/err.h>
+ #include <openssl/evp.h>
+ 
+-- 
+2.7.4
+
