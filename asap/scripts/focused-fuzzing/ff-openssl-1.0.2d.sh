@@ -2,7 +2,7 @@
 
 # Crashes rather quickly
 export OPTIMAL_N_CORES=1
-export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow"
+export CRASH_REGEXP="Assertion .* failed"
 
 FUZZER_EXTRA_ARGS="-max_len=512"
 

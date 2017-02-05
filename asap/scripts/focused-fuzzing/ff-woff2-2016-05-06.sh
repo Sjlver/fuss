@@ -2,7 +2,7 @@
 
 # On 1 core, found 38/40 crashes in one hour
 export OPTIMAL_N_CORES=1
-export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow|SUMMARY: libFuzzer: out-of-memory"
+export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow"
 
 FUZZER_EXTRA_CORPORA="$WORK_DIR/roboto"
 

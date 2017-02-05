@@ -57,6 +57,10 @@ def parse_data(d, crash_re):
         m = TIMESTAMP_RE.match(line)
         if m:
             last_timestamp = int(m.group(1))
+            last_job = None
+            start_after = {}
+            start_time = {}
+            progress_time = {}
             continue
         m = SECONDS_RE.match(line)
         if m:
