@@ -4,7 +4,7 @@
 # Note: this one will often stop with out-of-memory too... but I believe that's
 # a leak, not a special testcase.
 # Not sure how to handle the fact that this slows down fuzzing.
-export OPTIMAL_N_CORES=40
+export OPTIMAL_N_CORES=56
 export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow|SUMMARY: AddressSanitizer: bad-free|SUMMARY: AddressSanitizer: heap-use-after-free"
 
 get_git_revision() {
