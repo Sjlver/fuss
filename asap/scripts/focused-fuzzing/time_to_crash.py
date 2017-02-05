@@ -3,10 +3,18 @@
 """Parses data from time-to-crash experiments."""
 
 import argparse
+import io
 import re
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+
+TIMESTAMP_RE = re.compile(r'^fuss:.* timestamp: (\d+)')
+SECONDS_RE = re.compile(r'^#\d.* secs: (\d+)')
+JOB_END_RE = re.compile(r'^================== Job (\d+) exited with exit code \d+ ============')
+# Note: because stdout and stderr are mixed, JOB_START_RE does not always start
+# at the start of a line.
+JOB_START_RE = re.compile(r'\./fuzzer .* > fuzz-(\d+).log')
 
 def get_timestamp(d, description):
     m = re.search(description + r'.* timestamp: (\d+)', d, re.MULTILINE)
@@ -16,18 +24,68 @@ def parse_data(d, crash_re):
     def default(x, xd):
         return x if x is not None else xd
 
-    build_asan_ts = get_timestamp(d, r'fuss: building asan version\.')
-    warmup_asan_ts = get_timestamp(d, r'fuss: warming up asan-prof-.* version\.')
-    profiling_asan_ts = get_timestamp(d, r'fuss: profiling asan-prof-.* version\.')
-    build_fperf_ts = get_timestamp(d, r'fuss: building asan-fperf version\.')
-    test_fperf_ts = get_timestamp(d, r'fuss: testing asan-fperf version\.')
-    fuss_end_ts = get_timestamp(d, r'fuss: fuss end.*\.')
+    build_asan_ts = get_timestamp(d, r'^fuss: building asan version\.')
+    warmup_asan_ts = get_timestamp(d, r'^fuss: warming up asan-prof-.* version\.')
+    profiling_asan_ts = get_timestamp(d, r'^fuss: profiling asan-prof-.* version\.')
+    build_fperf_ts = get_timestamp(d, r'^fuss: building asan-fperf version\.')
+    test_fperf_ts = get_timestamp(d, r'^fuss: testing asan-fperf version\.')
+    fuss_end_ts = get_timestamp(d, r'^fuss: fuss end.*\.')
 
-    build_baseline_ts = get_timestamp(d, r'fuss: building baseline-.* version\.')
-    test_baseline_ts = get_timestamp(d, r'fuss: testing baseline-.* version\.')
-    baseline_end_ts = get_timestamp(d, r'fuss: baseline end\.')
+    build_baseline_ts = get_timestamp(d, r'^fuss: building baseline-.* version\.')
+    test_baseline_ts = get_timestamp(d, r'^fuss: testing baseline-.* version\.')
+    baseline_end_ts = get_timestamp(d, r'^fuss: baseline end\.')
 
-    crashes = True if re.search(crash_re, d, re.MULTILINE) else False
+    # Finding the actual time to crash is a bit tricky. We parse the log line
+    # by line, keeping track of events:
+    # - timestamps
+    # - start and progress of jobs
+    # - whether a job finds a crash or not
+    # Then, we take the time to crash as the first time when a job found the
+    # crash.
+    
+    last_timestamp = None
+    last_job = None
+    start_after = {}
+    start_time = {}
+    progress_time = {}
+
+    crash_re = re.compile(crash_re)
+    crashes = False
+    crash_time = 1e10
+
+    for line in io.StringIO(d):
+        m = TIMESTAMP_RE.match(line)
+        if m:
+            last_timestamp = int(m.group(1))
+            continue
+        m = SECONDS_RE.match(line)
+        if m:
+            progress_time[last_job] = start_time[last_job] + int(m.group(1))
+            continue
+        m = JOB_START_RE.search(line)
+        if m:
+            job_id = int(m.group(1))
+            start_after[job_id] = last_job
+            continue
+        m = JOB_END_RE.match(line)
+        if m:
+            last_job = int(m.group(1))
+            if start_after[last_job] is not None:
+                start_time[last_job] = progress_time[start_after[last_job]]
+            else:
+                start_time[last_job] = last_timestamp
+            progress_time[last_job] = start_time[last_job]
+            continue
+        m = crash_re.search(line)
+        if m:
+            crashes = True
+            crash_time = min(crash_time, progress_time[last_job])
+
+    if crashes:
+        if fuss_end_ts is not None:
+            fuss_end_ts = min(fuss_end_ts, crash_time)
+        if baseline_end_ts is not None:
+            baseline_end_ts = min(baseline_end_ts, crash_time)
 
     profiling_asan_ts = default(profiling_asan_ts, fuss_end_ts)
     build_fperf_ts = default(build_fperf_ts, fuss_end_ts)
