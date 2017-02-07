@@ -1,5 +1,5 @@
 From 3e8e98b24737426cb485ed36c2f5ec5dd960e634 Mon Sep 17 00:00:00 2001
-From: Jonas Wagner <jonas.wagner@epfl.ch>
+From: Fuzzing on a Shoestring <fuzzing.on.a.shoestring@gmail.com>
 Date: Fri, 14 Oct 2016 10:38:36 +0200
 Subject: [PATCH] Add missing #include <cstdint>
 

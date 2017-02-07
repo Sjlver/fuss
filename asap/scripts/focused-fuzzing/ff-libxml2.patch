@@ -1,5 +1,5 @@
 From 6c2f51d9a51b17e075cb4c41a03deb625d4f42cc Mon Sep 17 00:00:00 2001
-From: Jonas Wagner <jonas.wagner@epfl.ch>
+From: Fuzzing on a Shoestring <fuzzing.on.a.shoestring@gmail.com>
 Date: Tue, 13 Sep 2016 13:14:01 +0000
 Subject: [PATCH] Don't randomize dictionary keys during fuzzing.
 
