@@ -20,7 +20,7 @@ import argparse
 
 class Ancestry(object):
     # 12 NEW    cov: 3 ft: 3 corp: 2/2b exec/s: 0 rss: 24Mb secs: 0 L: 1 MS: 1 ChangeBit-
-    TESTCASE_RE = re.compile(r'^#(\d+)\s+NEW\s+cov: (\d+) (?:ft: (\d+) )?(?:indir: (\d+) )?corp: (\d+)/\d+b exec/s: (\d+) rss: \S+ secs: (\d+) L: (\d+) MS: (\d+) (.*)',
+    TESTCASE_RE = re.compile(r'^#(\d+)\s+NEW\s+cov: (\d+) (?:ft: (\d+) )?(?:indir: (\d+) )?corp: (\d+)/\d+Kb exec/s: (\d+) rss: \S+ secs: (\d+) L: (\d+) MS: (\d+) (.*)',
             re.MULTILINE)
     ANCESTRY_RE = re.compile(r'^ANCESTRY: ([a-fA-F\d]{40}) -> ([a-fA-F\d]{40})$',
             re.MULTILINE)
