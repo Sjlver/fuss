@@ -7,7 +7,6 @@ add_llvm_library(LLVMSanityChecks
   CostModel.cpp
   ExitInsteadOfAbort.cpp
   GCOV.cpp
-  OverheadEstimation.cpp
   SanityCheckCoverageCost.cpp
   SanityCheckGcovCost.cpp
   SanityCheckInstructions.cpp

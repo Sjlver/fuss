@@ -11,7 +11,6 @@ void llvm::initializeSanityChecks(PassRegistry &Registry) {
   initializeAsapCoveragePassPass(Registry);
   initializeAsapGcovPassPass(Registry);
   initializeExitInsteadOfAbortPass(Registry);
-  initializeOverheadEstimationPass(Registry);
   initializeSanityCheckGcovCostPass(Registry);
   initializeSanityCheckCoverageCostPass(Registry);
   initializeSanityCheckInstructionsPass(Registry);

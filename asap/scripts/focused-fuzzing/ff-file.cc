@@ -1,4 +1,4 @@
-/* Adapted from the FILE command's checks/test.c file, for ASAP.
+/* Adapted from the FILE command's checks/test.c file, for FUSS.
  *
  * Below is that file's original copyright notice. */
 

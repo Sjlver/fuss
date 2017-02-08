@@ -1,4 +1,4 @@
-CB_MULTIOS_REPO=${CB_MULTIOS_REPO:-git@github.com:Sjlver/cb-multios.git}
+CB_MULTIOS_REPO=${CB_MULTIOS_REPO:-https://github.com/trailofbits/cb-multios.git}
 
 cb_name="$1"
 if [ -z "$cb_name" ]; then

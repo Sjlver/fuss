@@ -2,8 +2,8 @@
 
 # On 20 cores (18 fuzzer jobs), found about 40% of the crashes in one hour
 # Note: this one will often stop with out-of-memory too... but I believe that's
-# a leak, not a special testcase.
-# Not sure how to handle the fact that this slows down fuzzing.
+# a leak, not a special testcase. Make sure to run it with spare jobs, so that
+# it uses all cores until the real crash is found.
 export OPTIMAL_N_CORES=56
 export CRASH_REGEXP="SUMMARY: AddressSanitizer: heap-buffer-overflow|SUMMARY: AddressSanitizer: bad-free|SUMMARY: AddressSanitizer: heap-use-after-free"
 
