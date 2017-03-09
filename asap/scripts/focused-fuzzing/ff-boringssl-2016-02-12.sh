@@ -27,19 +27,18 @@ build_target_and_fuzzer() {
 
   if ! [ -x "target-${name}-build/fuzzer" ]; then
     mkdir -p "target-${name}-build"
-    cd "target-${name}-build"
-    # Arrrgh, CMake, why do you add CFLAGS to the linker command line by default?
-    cmake -G Ninja -DBUILD_SHARED_LIBS=OFF \
-      -DCMAKE_C_COMPILER="$CC" -DCMAKE_C_FLAGS="$DEFAULT_CFLAGS $extra_cflags" \
-      -DCMAKE_EXE_LINKER_FLAGS="$DEFAULT_LDFLAGS $extra_ldflags" \
-      -DCMAKE_C_LINK_EXECUTABLE="<CMAKE_C_COMPILER> <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> <LINK_LIBRARIES>" \
-      ../boringssl-src
-    ninja -j $N_CORES -v ssl/libssl.a crypto/libcrypto.a 2>&1 | tee "../logs/build-${name}.log"
-    "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 -I include -c ../boringssl-src/fuzz/privkey.cc \
-      2>&1 | tee -a "../logs/build-${name}.log"
-    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags privkey.o ssl/libssl.a crypto/libcrypto.a \
-      "$LIBFUZZER_A" -o fuzzer \
-      2>&1 | tee -a "../logs/build-${name}.log"
-    cd ..
+    (
+      cd "target-${name}-build"
+      # Arrrgh, CMake, why do you add CFLAGS to the linker command line by default?
+      cmake -G Ninja -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_C_COMPILER="$CC" -DCMAKE_C_FLAGS="$DEFAULT_CFLAGS $extra_cflags" \
+        -DCMAKE_EXE_LINKER_FLAGS="$DEFAULT_LDFLAGS $extra_ldflags" \
+        -DCMAKE_C_LINK_EXECUTABLE="<CMAKE_C_COMPILER> <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> <LINK_LIBRARIES>" \
+        ../boringssl-src
+      ninja -j $N_CORES -v ssl/libssl.a crypto/libcrypto.a
+      "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 -I include -c ../boringssl-src/fuzz/privkey.cc
+      "$CXX" $DEFAULT_LDFLAGS $extra_ldflags privkey.o ssl/libssl.a crypto/libcrypto.a \
+        "$LIBFUZZER_A" -o fuzzer
+    )
   fi
 }

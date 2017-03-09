@@ -143,8 +143,8 @@ test_fuzzer() {
       "./fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
         -print_pcs=1 -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
         -artifact_prefix="CORPUS-${run_id}/" \
-        $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
-        | tee -a "../logs/fuzzer-${name}-${run_id}.log"
+        $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA \
+        >> "../logs/fuzzer-${name}-${run_id}.log" 2>&1
 
       cd ..
     )
@@ -173,8 +173,8 @@ search_crash() {
         "./fuzzer" -max_total_time=$FUZZER_TESTING_SECONDS \
         -print_pcs=1 -print_final_stats=1 -jobs=$((10 * N_FUZZER_JOBS)) -workers=$N_FUZZER_JOBS \
         -artifact_prefix="CORPUS-${run_id}/" \
-        $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
-        | tee -a "../logs/fuzzer-${name}-${run_id}.log"
+        $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA \
+        >> "../logs/fuzzer-${name}-${run_id}.log" 2>&1
 
       cd ..
     )
@@ -203,8 +203,8 @@ profile_fuzzer() {
           "./fuzzer" -max_total_time=$FUZZER_PROFILING_SECONDS \
           -print_pcs=1 -print_final_stats=1 -jobs=$N_FUZZER_JOBS -workers=$N_FUZZER_JOBS \
           -artifact_prefix="CORPUS-${run_id}/" \
-          $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA 2>&1 \
-          | tee -a "../logs/perf-${name}.log"
+          $FUZZER_EXTRA_ARGS "CORPUS-${run_id}" $FUZZER_EXTRA_CORPORA \
+          >> "../logs/perf-${name}.log" 2>&1
       )
       cd ..
     ) 9>"/tmp/asap_global_perf_lock"
@@ -230,8 +230,10 @@ compute_coverage() {
   fi
 
   if ! [ -f "logs/coverage-${name}-${run_id}.log" ]; then
-    "./target-${reference}-build/fuzzer" -runs=0 "target-${name}-build/CORPUS-${run_id}" 2>&1 \
+    echo "compute_coverage: ${name} run_id: ${run_id} timestamp: $(date +%s)" \
       | tee "logs/coverage-${name}-${run_id}.log"
+    "./target-${reference}-build/fuzzer" -runs=0 "target-${name}-build/CORPUS-${run_id}" \
+      >> "logs/coverage-${name}-${run_id}.log" 2>&1
   fi
 }
 
@@ -247,17 +249,29 @@ estimate_fperf_threshold() {
   echo $((FUZZER_PROFILING_SECONDS * N_FUZZER_JOBS))
 }
 
+# Build target and fuzzer, writing the output to the right logfile
+build_target_and_fuzzer_with_logging() {
+  local name="$1"
+  local extra_cflags="$2"
+  local extra_ldflags="$3"
+
+  echo "build_target_and_fuzzer: ${name} run_id: ${run_id} timestamp: $(date +%s)" \
+    | tee "logs/build-${name}.log"
+  build_target_and_fuzzer "$name" "$extra_cflags" "$extra_ldflags" \
+    >> "logs/build-${name}.log" 2>&1
+}
+
 # Generate initial, pgo, and thresholded versions
 build_all() {
   # Initial builds
   if echo "$VARIANTS" | grep -q "asan"; then
-    build_target_and_fuzzer "asan" "$ASAN_CFLAGS" "$ASAN_CFLAGS"
+    build_target_and_fuzzer_with_logging "asan" "$ASAN_CFLAGS" "$ASAN_CFLAGS"
   fi
   if echo "$VARIANTS" | grep -q "tpcg"; then
-    build_target_and_fuzzer "tpcg" "$TPCG_CFLAGS" "$TPCG_LDFLAGS"
+    build_target_and_fuzzer_with_logging "tpcg" "$TPCG_CFLAGS" "$TPCG_LDFLAGS"
   fi
   if echo "$VARIANTS" | grep -q "noinstr"; then
-    build_target_and_fuzzer "noinstr" "" "$TPCG_LDFLAGS"
+    build_target_and_fuzzer_with_logging "noinstr" "" "$TPCG_LDFLAGS"
   fi
 
   # Run the fuzzer under perf. Use branch tracing because that's what
@@ -272,9 +286,14 @@ build_all() {
         # Minimize the corpus of this build, and compute it's coverage. We're
         # re-using its corpus later as initial corpus, and so knowing the
         # coverage is useful.
+        echo "compute initial coverage: ${variant}-prof run_id: ${run_id} timestamp: $(date +%s)" \
+          | tee "logs/merge-${variant}-prof-${run_id}.log"
         mv "target-${variant}-prof-${run_id}-build/CORPUS-$run_id" "target-${variant}-prof-${run_id}-build/CORPUS-${run_id}-OLD"
         mkdir "target-${variant}-prof-${run_id}-build/CORPUS-$run_id"
-        "./target-${variant}-prof-${run_id}-build/fuzzer" -merge=1 "target-${variant}-prof-${run_id}-build/CORPUS-$run_id" "target-${variant}-prof-${run_id}-build/CORPUS-${run_id}-OLD"
+        "./target-${variant}-prof-${run_id}-build/fuzzer" -merge=1 \
+          "target-${variant}-prof-${run_id}-build/CORPUS-$run_id" \
+          "target-${variant}-prof-${run_id}-build/CORPUS-${run_id}-OLD" \
+          >> "logs/merge-${variant}-prof-${run_id}.log" 2>&1
         rm -r "target-${variant}-prof-${run_id}-build/CORPUS-${run_id}-OLD"
         compute_coverage "${variant}-prof-${run_id}"
       fi
@@ -310,7 +329,7 @@ build_all() {
 
     case "$variant" in
       *-nofuss*|*-fperf*|*-fprec*)
-        LIBFUZZER_A="$libfuzzer" build_target_and_fuzzer "${variant}-${run_id}" "$cflags" "$ldflags";;
+        LIBFUZZER_A="$libfuzzer" build_target_and_fuzzer_with_logging "${variant}-${run_id}" "$cflags" "$ldflags";;
       asan|tpcg|noinstr)
         [ -d "target-${variant}-${run_id}-build" ] || rsync -a --delete "target-${variant}-build/" "target-${variant}-${run_id}-build";;
     esac
@@ -422,7 +441,7 @@ do_fuss() {
 
     # Build initial fuzzer.
     echo "fuss: building asan version. timestamp: $start_time"
-    build_target_and_fuzzer "asan" "$ASAN_CFLAGS" "$ASAN_CFLAGS"
+    build_target_and_fuzzer_with_logging "asan" "$ASAN_CFLAGS" "$ASAN_CFLAGS"
 
     # Warmup
     echo "fuss: warming up asan-prof-${run_id} version. timestamp: $(date +%s)"
@@ -470,7 +489,7 @@ do_baseline() {
     local end_time="$((start_time + FUSS_TOTAL_SECONDS))"
 
     echo "fuss: building baseline-${run_id} version. timestamp: $start_time"
-    build_target_and_fuzzer "asan" "$ASAN_CFLAGS" "$ASAN_LDFLAGS"
+    build_target_and_fuzzer_with_logging "asan" "$ASAN_CFLAGS" "$ASAN_LDFLAGS"
     rsync -a --delete "target-asan-build/" "target-baseline-${run_id}-build"
     
     # And let the fuzzer run for some time. We ignore crashes in the fuzzer,

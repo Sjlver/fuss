@@ -27,17 +27,16 @@ build_target_and_fuzzer() {
 
   if ! [ -x "target-${name}-build/fuzzer" ]; then
     mkdir -p "target-${name}-build"
-    cd "target-${name}-build"
-    CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" CXXFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" \
-      ../harfbuzz-src/configure --enable-static --disable-shared \
-      2>&1 | tee "../logs/build-${name}.log"
-    make -j $N_CORES -C src fuzzing 2>&1 | tee -a "../logs/build-${name}.log"
-    "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 -I src -I ../harfbuzz-src/src \
-      -c ../harfbuzz-src/test/fuzzing/hb-fuzzer.cc \
-      2>&1 | tee -a "../logs/build-${name}.log"
-    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags hb-fuzzer.o src/.libs/libharfbuzz-fuzzing.a -lglib-2.0 \
-      "$LIBFUZZER_A" -o fuzzer \
-      2>&1 | tee -a "../logs/build-${name}.log"
-    cd ..
+    (
+      cd "target-${name}-build"
+      CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" CXXFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" \
+        ../harfbuzz-src/configure --enable-static --disable-shared
+      make -j $N_CORES -C src fuzzing
+      "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 -I src -I ../harfbuzz-src/src \
+        -c ../harfbuzz-src/test/fuzzing/hb-fuzzer.cc
+      "$CXX" $DEFAULT_LDFLAGS $extra_ldflags hb-fuzzer.o src/.libs/libharfbuzz-fuzzing.a -lglib-2.0 \
+        "$LIBFUZZER_A" -o fuzzer
+      cd ..
+    )
   fi
 }

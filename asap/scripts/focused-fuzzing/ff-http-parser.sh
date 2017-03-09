@@ -15,13 +15,14 @@ build_target_and_fuzzer() {
 
   if ! [ -x "target-${name}-build/fuzzer" ]; then
     mkdir -p "target-${name}-build"
-    cd "target-${name}-build"
-    "$CC" $HTTP_PARSER_CFLAGS $DEFAULT_CFLAGS $extra_cflags -I ../http-parser-src -c ../http-parser-src/http_parser.c \
-      -o http_parser.o 2>&1 | tee "../logs/build-${name}.log"
-    "$CC" $DEFAULT_CFLAGS $extra_cflags -I ../http-parser-src -c "$SCRIPT_DIR/ff-http-parser.c" \
-      -o ff-http-parser.o 2>&1 | tee -a "../logs/build-${name}.log"
-    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-http-parser.o http_parser.o "$LIBFUZZER_A" \
-      -o fuzzer 2>&1 | tee -a "../logs/build-${name}.log"
-    cd ..
+    (
+      cd "target-${name}-build"
+      "$CC" $HTTP_PARSER_CFLAGS $DEFAULT_CFLAGS $extra_cflags -I ../http-parser-src -c ../http-parser-src/http_parser.c \
+        -o http_parser.o
+      "$CC" $DEFAULT_CFLAGS $extra_cflags -I ../http-parser-src -c "$SCRIPT_DIR/ff-http-parser.c" \
+        -o ff-http-parser.o
+      "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-http-parser.o http_parser.o "$LIBFUZZER_A" \
+        -o fuzzer
+    )
   fi
 }

@@ -28,18 +28,18 @@ build_target_and_fuzzer() {
 
   if ! [ -x "target-${name}-build/fuzzer" ]; then
     rsync -a re2/ "target-${name}-build"
-    cd "target-${name}-build"
+    (
+      cd "target-${name}-build"
 
-    make clean 2>&1 | tee "../logs/build-${name}.log"
-    CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" CXXFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" \
-      make -j $N_CORES 2>&1 | tee -a "../logs/build-${name}.log"
+      make clean
+      CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" CXXFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" \
+        make -j $N_CORES
 
-    "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 -I . \
-      -c "$SCRIPT_DIR/ff-re2-2014-12-09.cc" \
-      2>&1 | tee -a "../logs/build-${name}.log"
-    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-re2-2014-12-09.o obj/libre2.a \
-      "$LIBFUZZER_A" -o fuzzer \
-      2>&1 | tee -a "../logs/build-${name}.log"
-    cd ..
+      "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 -I . \
+        -c "$SCRIPT_DIR/ff-re2-2014-12-09.cc"
+      "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-re2-2014-12-09.o obj/libre2.a \
+        "$LIBFUZZER_A" -o fuzzer
+      cd ..
+    )
   fi
 }

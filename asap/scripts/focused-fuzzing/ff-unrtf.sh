@@ -22,16 +22,17 @@ build_target_and_fuzzer() {
 
   if ! [ -x "target-${name}-build/fuzzer" ]; then
     mkdir -p "target-${name}-build"
-    cd "target-${name}-build"
-    CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" ../unrtf-0.21.9/configure \
-      --disable-silent-rules --disable-dependency-tracking
-    make -j $N_CORES V=1 2>&1 | tee "../logs/build-${name}.log"
+    (
+      cd "target-${name}-build"
+      CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" ../unrtf-0.21.9/configure \
+        --disable-silent-rules --disable-dependency-tracking
+      make -j $N_CORES V=1
 
-    "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
-      -DHAVE_CONFIG_H -I src -I"$WORK_DIR/unrtf-0.21.9/src" \
-      -c "$SCRIPT_DIR/ff-unrtf.cc"
-    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-unrtf.o $(ls -1 src/*.o | grep -v main.o) \
-      "$LIBFUZZER_A" -o fuzzer
-    cd ..
+      "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
+        -DHAVE_CONFIG_H -I src -I"$WORK_DIR/unrtf-0.21.9/src" \
+        -c "$SCRIPT_DIR/ff-unrtf.cc"
+      "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-unrtf.o $(ls -1 src/*.o | grep -v main.o) \
+        "$LIBFUZZER_A" -o fuzzer
+    )
   fi
 }

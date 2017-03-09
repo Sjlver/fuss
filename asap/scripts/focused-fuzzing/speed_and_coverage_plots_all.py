@@ -3,10 +3,16 @@
 """Plots speed and coverage for multiple benchmarks and versions."""
 
 import argparse
+import os
 import re
 import sys
 import pandas as pd
 import numpy as np
+import matplotlib
+# Before importing pyplot, check if we have an X11 display. Use a
+# non-interactive backend otherwise.
+if not os.environ.get('DISPLAY'):
+    matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 DATA_FILE_RE = re.compile(r'(?:.*/)?([^/]+)/logs/.*-(\d+)\.log')
@@ -44,7 +50,7 @@ def load_data(data_files):
         if not m:
             raise ValueError("Unexpected data file name: " + data_file)
         cur_data = pd.read_table(data_file, sep=r'\s*\t\s*', engine='python')
-        cur_data['benchmark'] = BENCHMARK_NAMES_MAP[m.group(1)]
+        cur_data['benchmark'] = BENCHMARK_NAMES_MAP.get(m.group(1), m.group(1))
         cur_data['name'] = cur_data['name'].map(lambda n: re.sub('-\d+$', '', n))
         cur_data['run_id'] = int(m.group(2))
         cur_data.set_index(['benchmark', 'name', 'run_id'], inplace=True)
@@ -101,14 +107,15 @@ def main():
 
     grouped = data.groupby(level=['benchmark', 'name'])
     benchmarks = data.index.levels[0]
+    versions = [ v for v in VERSIONS if v in data.index.levels[1] ]
     xs = np.arange(len(benchmarks))
-    bar_width = 1.0 / (len(VERSIONS) + 2)
+    bar_width = 1.0 / (len(versions) + 2)
 
     # Plot mean executions
     means = grouped['execs'].apply(lambda s: bootstrap_ci(s, np.mean))
 
     fig = plt.figure()
-    for i, version in enumerate(VERSIONS):
+    for i, version in enumerate(versions):
         plt.bar(xs + (i + 1) * bar_width,
                 means.loc[:, version, 'estimate'],
                 bar_width,
@@ -120,10 +127,10 @@ def main():
     plt.xlabel("Benchmark")
     plt.xlim(0, len(benchmarks))
     plt.ylabel("Executions (rel. to noinstr)")
-    plt.xticks(xs + (len(VERSIONS) / 2 + 1) * bar_width, benchmarks)
+    plt.xticks(xs + (len(versions) / 2.0 + 1) * bar_width, benchmarks)
     plt.grid(True, axis='y')
 
-    plt.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=len(VERSIONS))
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=len(versions))
     
     fig.set_size_inches(12, 4)
     if args.output_execs:
@@ -136,7 +143,7 @@ def main():
     means = means.groupby(level='benchmark').transform(normalize_aggregated_coverage)
 
     fig = plt.figure()
-    for i, version in enumerate(VERSIONS):
+    for i, version in enumerate(versions):
         plt.bar(xs + (i + 1) * bar_width,
                 means.loc[:, version, 'estimate'],
                 bar_width,
@@ -148,8 +155,10 @@ def main():
     plt.xlabel("Benchmark")
     plt.xlim(0, len(benchmarks))
     plt.ylabel("Coverage (BB, rel. to baseline)")
-    plt.xticks(xs + (len(VERSIONS) / 2 + 1) * bar_width, benchmarks)
+    plt.xticks(xs + (len(versions) / 2 + 1) * bar_width, benchmarks)
     plt.grid(True, axis='y')
+
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=len(versions))
     
     fig.set_size_inches(12, 4)
     if args.output_cov:

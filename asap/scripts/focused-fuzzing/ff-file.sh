@@ -15,18 +15,20 @@ build_target_and_fuzzer() {
 
   if ! [ -x "target-${name}-build/fuzzer" ]; then
     mkdir -p "target-${name}-build"
-    cd "target-${name}-build"
-    CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" ../file/configure \
-      --disable-silent-rules --disable-dependency-tracking --enable-static --disable-shared --disable-zlib 
-    make -j $N_CORES V=1 2>&1 | tee "../logs/build-${name}.log"
+    (
+      cd "target-${name}-build"
+      CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" ../file/configure \
+        --disable-silent-rules --disable-dependency-tracking --enable-static --disable-shared --disable-zlib 
+      make -j $N_CORES V=1
 
-    "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
-      -DASAP_MAGIC_FILE_PATH="\"$WORK_DIR/target-${name}-build/magic/magic\"" \
-      -I "$WORK_DIR/target-${name}-build/src" \
-      -c "$SCRIPT_DIR/ff-file.cc"
-    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-file.o \
-      "$WORK_DIR/target-${name}-build/src/.libs/libmagic.a" \
-      "$LIBFUZZER_A" -o fuzzer
-    cd ..
+      "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
+        -DASAP_MAGIC_FILE_PATH="\"$WORK_DIR/target-${name}-build/magic/magic\"" \
+        -I "$WORK_DIR/target-${name}-build/src" \
+        -c "$SCRIPT_DIR/ff-file.cc"
+      "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-file.o \
+        "$WORK_DIR/target-${name}-build/src/.libs/libmagic.a" \
+        "$LIBFUZZER_A" -o fuzzer
+      cd ..
+    )
   fi
 }

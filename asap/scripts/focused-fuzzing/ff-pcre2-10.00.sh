@@ -18,19 +18,17 @@ build_target_and_fuzzer() {
 
   if ! [ -x "target-${name}-build/fuzzer" ]; then
     mkdir -p "target-${name}-build"
-    cd "target-${name}-build"
+    (
+      cd "target-${name}-build"
 
-    CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" \
-      ../pcre2/configure --enable-never-backslash-C --with-match-limit=1000 --with-match-limit-recursion=1000 \
-      2>&1 | tee "../logs/build-${name}.log"
-    make -j $N_CORES 2>&1 | tee -a "../logs/build-${name}.log"
+      CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags" \
+        ../pcre2/configure --enable-never-backslash-C --with-match-limit=1000 --with-match-limit-recursion=1000
+      make -j $N_CORES
 
-    "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
-      -I src -I ../pcre2/src -c "$SCRIPT_DIR/ff-pcre2-10.00.cc" \
-      2>&1 | tee -a "../logs/build-${name}.log"
-    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-pcre2-10.00.o .libs/libpcre2-posix.a .libs/libpcre2-8.a \
-      "$LIBFUZZER_A" -o fuzzer \
-      2>&1 | tee -a "../logs/build-${name}.log"
-    cd ..
+      "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
+        -I src -I ../pcre2/src -c "$SCRIPT_DIR/ff-pcre2-10.00.cc"
+      "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-pcre2-10.00.o .libs/libpcre2-posix.a .libs/libpcre2-8.a \
+        "$LIBFUZZER_A" -o fuzzer
+    )
   fi
 }

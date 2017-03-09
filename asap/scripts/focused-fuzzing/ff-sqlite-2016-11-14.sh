@@ -19,14 +19,12 @@ build_target_and_fuzzer() {
 
   if ! [ -x "target-${name}-build/fuzzer" ]; then
     mkdir "target-${name}-build"
-    cd "target-${name}-build"
-
     (
+      cd "target-${name}-build"
+
       "$CC" $DEFAULT_CFLAGS $extra_cflags -c "../sqlite3-src/sqlite3.c"
       "$CC" $DEFAULT_CFLAGS $extra_cflags -c "../sqlite3-src/ossfuzz.c"
       "$CXX" $DEFAULT_LDFLAGS $extra_ldflags sqlite3.o ossfuzz.o "$LIBFUZZER_A" -o fuzzer
-    ) 2>&1 | tee "../logs/build-${name}.log"
-    
-    cd ..
+    )
   fi
 }

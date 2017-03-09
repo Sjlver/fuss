@@ -14,22 +14,23 @@ build_target_and_fuzzer() {
 
   if ! [ -x "target-${name}-build/fuzzer" ]; then
     mkdir -p "target-${name}-build"
-    cd "target-${name}-build"
+    (
+      cd "target-${name}-build"
 
-    # Configure pcre2 with relatively low resource limits, to ensure fuzzing is
-    # fast, and to avoid false positives from AddressSanitizer's low stack
-    # overflow limits.
-    CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS" LDFLAGS="$DEFAULT_LDFLAGS" ../$SRC_DIR/configure \
-      --disable-shared --with-parens-nest-limit=200 --with-match-limit=1000000 --with-match-limit-recursion=200
-    make CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags"  -j $N_CORES V=1 libpcre2-posix.la libpcre2-8.la 2>&1 | tee "../logs/build-${name}.log"
+      # Configure pcre2 with relatively low resource limits, to ensure fuzzing is
+      # fast, and to avoid false positives from AddressSanitizer's low stack
+      # overflow limits.
+      CC="$CC" CXX="$CXX" CFLAGS="$DEFAULT_CFLAGS" LDFLAGS="$DEFAULT_LDFLAGS" ../$SRC_DIR/configure \
+        --disable-shared --with-parens-nest-limit=200 --with-match-limit=1000000 --with-match-limit-recursion=200
+      make CFLAGS="$DEFAULT_CFLAGS $extra_cflags" LDFLAGS="$DEFAULT_LDFLAGS $extra_ldflags"  -j $N_CORES V=1 libpcre2-posix.la libpcre2-8.la
 
-    "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
-      -I "$WORK_DIR/target-${name}-build/src" -I "$WORK_DIR/$SRC_DIR/src" \
-      -c "$SCRIPT_DIR/ff-pcre.cc"
-    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-pcre.o \
-      "$WORK_DIR/target-${name}-build/.libs/libpcre2-posix.a" \
-      "$WORK_DIR/target-${name}-build/.libs/libpcre2-8.a" \
-      "$LIBFUZZER_A" -o fuzzer
-    cd ..
+      "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
+        -I "$WORK_DIR/target-${name}-build/src" -I "$WORK_DIR/$SRC_DIR/src" \
+        -c "$SCRIPT_DIR/ff-pcre.cc"
+      "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-pcre.o \
+        "$WORK_DIR/target-${name}-build/.libs/libpcre2-posix.a" \
+        "$WORK_DIR/target-${name}-build/.libs/libpcre2-8.a" \
+        "$LIBFUZZER_A" -o fuzzer
+    )
   fi
 }

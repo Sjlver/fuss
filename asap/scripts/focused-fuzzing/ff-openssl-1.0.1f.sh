@@ -27,19 +27,18 @@ build_target_and_fuzzer() {
 
   if ! [ -x "target-${name}-build/fuzzer" ]; then
     rsync -a openssl/ "target-${name}-build"
-    cd "target-${name}-build"
+    (
+      cd "target-${name}-build"
 
-    CC="$CC" CXX="$CXX" ./Configure $DEFAULT_CFLAGS $extra_cflags linux-x86_64 2>&1  | tee "../logs/build-${name}.log"
-    # Weird... make seems to fail the first time?
-    (make -j $N_CORES build_libs || make -j $N_CORES build_libs) 2>&1 | tee -a "../logs/build-${name}.log"
+      CC="$CC" CXX="$CXX" ./Configure $DEFAULT_CFLAGS $extra_cflags linux-x86_64
+      # Weird... make seems to fail the first time?
+      (make -j $N_CORES build_libs || make -j $N_CORES build_libs)
 
-    "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
-      -I include -DCERT_PATH="\"$SCRIPT_DIR/\"" \
-      -c "$SCRIPT_DIR/ff-openssl-1.0.1f.cc" \
-      2>&1 | tee -a "../logs/build-${name}.log"
-    "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-openssl-1.0.1f.o libssl.a libcrypto.a \
-      "$LIBFUZZER_A" -o fuzzer \
-      2>&1 | tee -a "../logs/build-${name}.log"
-    cd ..
+      "$CXX" $DEFAULT_CFLAGS $extra_cflags -std=c++11 \
+        -I include -DCERT_PATH="\"$SCRIPT_DIR/\"" \
+        -c "$SCRIPT_DIR/ff-openssl-1.0.1f.cc"
+      "$CXX" $DEFAULT_LDFLAGS $extra_ldflags ff-openssl-1.0.1f.o libssl.a libcrypto.a \
+        "$LIBFUZZER_A" -o fuzzer
+    )
   fi
 }
