@@ -76,8 +76,15 @@ def bootstrap_ci(s, f, confidence=0.95):
     return pd.Series({'estimate': estimate, 'lower': lower, 'upper': upper})
 
 def normalize_execs(execs):
-    """Normalize executions; scale them to the noinstr version."""
-    return execs / float(execs.loc[:, 'noinstr', :])
+    """Normalize executions; scale them relative to no-fuss version."""
+    factors = {}
+    for version in execs.index.levels[1]:
+        base = re.sub(r'-.*', '', version)
+        base = base.replace('noinstr', 'tpcg')
+        factors[version] = float(execs.loc[:, base, :])
+    factors = pd.Series(factors)
+    execs = execs.div(factors, level=1)
+    return execs
 
 def normalize_coverage(cov):
     """Compute coverage deltas"""
@@ -126,7 +133,8 @@ def main():
 
     plt.xlabel("Benchmark")
     plt.xlim(0, len(benchmarks))
-    plt.ylabel("Executions (rel. to noinstr)")
+    plt.ylabel("Executions (rel. to baseline)")
+    plt.ylim(0, 12)
     plt.xticks(xs + (len(versions) / 2.0 + 1) * bar_width, benchmarks)
     plt.grid(True, axis='y')
 
@@ -155,6 +163,7 @@ def main():
     plt.xlabel("Benchmark")
     plt.xlim(0, len(benchmarks))
     plt.ylabel("Coverage (BB, rel. to baseline)")
+    plt.ylim(0, 12)
     plt.xticks(xs + (len(versions) / 2 + 1) * bar_width, benchmarks)
     plt.grid(True, axis='y')
 
