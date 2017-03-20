@@ -1,0 +1,47 @@
+__sanitizer_cov_trace_pc_guard:23394:3342
+ 0: 0
+ 1: 3342
+ 2: 0
+ 3: 3342
+ 2: TracePcGuard:0
+  3: 0
+  5: 0
+  2: _ZN11__sanitizer15atomic_exchangeINS_15atomic_uint32_tEEENT_4TypeEPVS2_S3_NS_12memory_orderE:0
+   5: 0
+  5: _ZN11__sanitizer24InternalMmapVectorNoCtorImEixEm:0
+   1: 0
+main:86544:0
+ 0: 0
+ 1.1: 619 __sanitizer_cov_trace_pc_guard:633
+ 2: 581 code_in_function:584
+ 9.1: 721
+ 9.2: 721
+ 9.3: 361 __sanitizer_cov_trace_pc_guard:366
+ 9.4: 194
+ 9.7: 133 __sanitizer_cov_trace_pc_guard:138
+ 9.9: 229
+ 9.10: 123 __sanitizer_cov_trace_pc_guard:123
+ 9.11: 110
+ 9.14: 104 __sanitizer_cov_trace_pc_guard:116
+ 12: 726
+ 13: 726
+ 17: 364 __sanitizer_cov_trace_pc_guard:367
+ 18.1: 224
+ 22: 150 __sanitizer_cov_trace_pc_guard:155
+ 25: 275
+ 28: 136 __sanitizer_cov_trace_pc_guard:141
+ 33: 143 __sanitizer_cov_trace_pc_guard:146
+ 39: 0
+ 42: 0
+code_in_function:41500:556
+ 0: 556 __sanitizer_cov_trace_pc_guard:578
+ 1: 709
+ 2: 709
+ 6: 317 __sanitizer_cov_trace_pc_guard:320
+ 7.1: 174
+ 11: 136 __sanitizer_cov_trace_pc_guard:137
+ 14: 252
+ 17: 136 __sanitizer_cov_trace_pc_guard:140
+ 18.1: 130
+ 22: 119 __sanitizer_cov_trace_pc_guard:118
+ 25: 174
