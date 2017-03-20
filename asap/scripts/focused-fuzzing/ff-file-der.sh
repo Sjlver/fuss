@@ -9,7 +9,7 @@ export CRASH_REGEXP="AddressSanitizer: heap-buffer-overflow|AddressSanitizer: SE
 init_target() {
   if ! [ -d file ]; then
     git clone https://github.com/file/file.git
-    (cd file && git checkout fe5879185744b60613000c83b7f564ff4d88ab5a)
+    (cd file && git checkout 1d7ecf11937305da6b7503916778ad1071e1bb6e)
     (cd file && autoreconf -f -i)
   fi
 }

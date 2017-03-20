@@ -14,8 +14,8 @@ init_target() {
   if ! [ -d file ]; then
     git clone https://github.com/file/file.git
     (cd file && \
-      git checkout 0e93a47b7feaee1d3a0f1b14e40f0ead17d8ccd4 && \
-      git revert --no-edit -X ours 2e3e8a716151a87c2301a49e0e37b0b126a26994)
+      git checkout a6d1be7348c5decb6bdf1d35b75aed8e2652117f && \
+      git revert --no-edit -X ours 2ff17368a162a4f5c3013737414ede9acd3f85d3)
     (cd file && autoreconf -f -i)
   fi
 }
