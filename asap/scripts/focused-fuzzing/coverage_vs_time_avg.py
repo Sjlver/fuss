@@ -77,8 +77,8 @@ def main():
     plt.grid(True)
     plt.xlim(xlim)
 
-    fig.set_size_inches(5.5, 1.8)
-    fig.tight_layout()
+    fig.set_size_inches(5.5, 1.6)
+    fig.subplots_adjust(left=0.17, right=0.98, bottom=0.15, top=0.95)
     if args.output:
         plt.savefig(args.output)
     else:
