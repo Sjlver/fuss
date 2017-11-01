@@ -72,13 +72,13 @@ def main():
     legend = plt.legend(loc='lower right', ncol=2, title=args.benchmark)
     title = legend.get_title()
     title.set_weight('bold')
-    plt.ylabel('Coverage\n[blocks]')
+    #plt.ylabel('Coverage\n[blocks]')
     plt.xticks([h * 3600 for h in hours], ['{}h'.format(h) for h in hours])
     plt.grid(True)
     plt.xlim(xlim)
 
     fig.set_size_inches(5.5, 1.6)
-    fig.subplots_adjust(left=0.17, right=0.98, bottom=0.15, top=0.95)
+    fig.subplots_adjust(left=0.10, right=0.99, bottom=0.15, top=0.95)
     if args.output:
         plt.savefig(args.output)
     else:
