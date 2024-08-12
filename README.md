@@ -1,20 +1,40 @@
-ASAP: High System Code Security at Low Overhead
-===============================================
+FUSS: Fuzzing on a Shoestring
+=============================
 
-ASAP is a system for instrumenting software using sanity checks, subject to
-performance constraints.
+FUSS aims to improve the efficiency of fuzz testing, by optimizing the
+instrumentation in the program under test. FUSS observes the program under test
+while it is being run by the fuzzer. It then selects the instrumentation atoms
+that add the most bug-finding potential for the least performance overhead. FUSS
+then recompiles the program with this efficient set of instrumentation atoms.
+This reduces the time to find bugs by about 3x for some benchmarks.
+
+FUSS is based on ASAP, a system for instrumenting software using sanity checks,
+subject to performance constraints.
 
 ASAP is based on the LLVM compiler framework. For more information about LLVM
 please consult `llvm/README.txt` and `llvm/LICENSE.txt`. ASAP itself is
 distributed under the terms of `LICENSE.txt` in the same folder as this
 `README.md` file.
 
+Our research on FUSS was published as part of
+[Jonas Wagner's PhD thesis](https://infoscience.epfl.ch/entities/publication/5c717c3b-acfa-497b-8286-bc12b7c7747c).
 
-Documentation
--------------
+
+The content of this repository
+------------------------------
 
 The files in `asap/doc/` and the remainder of this README contain various examples
-of using ASAP.
+of using FUSS and ASAP.
+
+`asap/scripts` contains scripts to run FUSS and ASAP, and to reproduce various
+graphs used in our research papers.
+
+`asap/scripts/focused-fuzzing` has files related to FUSS in particular. It was
+initially called "focused fuzzing", and some files still use the "ff-" prefix.
+
+`include/llvm/Transforms/SanityChecks/` and `lib/Transforms/SanityChecks/`
+contain the LLVM implementation parts of FUSS and ASAP.
+`test/Transforms/SanityChecks/` contains corresponding unit tests.
 
 
 Obtaining and Compiling ASAP
@@ -83,11 +103,10 @@ Obtaining and Compiling ASAP
 Trying ASAP on a small example
 ------------------------------
 
-A small example for ASAP is available in
-`llvm/lib/Transforms/SanityChecks/doc/sum/`. It contains a small program
-vulnerable to a buffer overflow. The program is protected by compiling it with
-AddressSanitizer. ASAP then measures the effect of each ASan check, and removes
-the most expensive ones.
+A small example for ASAP is available in `asap/doc/sum/`. It contains a small
+program vulnerable to a buffer overflow. The program is protected by compiling
+it with AddressSanitizer. ASAP then measures the effect of each ASan check, and
+removes the most expensive ones.
 
 To run the example:
 
